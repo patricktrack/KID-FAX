@@ -13,9 +13,13 @@ Perfect for:
 ## Things to Buy (Affiliate links)
 
 -Printer: (https://amzn.to/43Vx9DT)
+
 -Raspberry Pi Kit: (https://amzn.to/3XoAZli)
+
 -Receipt Paper: (https://amzn.to/4ag6q8Y)
+
 -You’ll also need a monitor that supports HDMI input. Most do, but here’s a cheap one if you need it: (https://amzn.to/4rsK620)
+
 -Plus a keyboard and mouse, I use this Bluetooth set: (https://amzn.to/4akjutW)
 
 ## Description
