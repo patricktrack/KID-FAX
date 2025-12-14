@@ -1,147 +1,262 @@
-# 🚀 Quick Deploy to Netlify
+# Kid Fax Quick Start Guide
 
-Your ticket printer app is now ready to deploy!
+Get your Kid Fax SMS mailbox up and running in 15 minutes!
 
-## What's Set Up
+## Prerequisites
 
-✅ **Frontend** - Ready for Netlify (in `frontend/` folder)  
-✅ **Backend API** - Ready for Raspberry Pi (in `backend/` folder)  
-✅ **Configuration** - `netlify.toml` and `.gitignore` ready  
-✅ **Documentation** - Complete guides created  
+- Raspberry Pi (any model with GPIO, tested on Pi 400)
+- 58mm Thermal Printer (USB or Serial)
+- Twilio account (free trial available)
+- Internet connection
 
-## Deploy in 5 Steps
+## Step 1: Hardware Setup (5 minutes)
 
-### 1. Push to GitHub (2 minutes)
+### USB Printer
+1. Connect thermal printer to Raspberry Pi USB port
+2. Power on the printer
+
+### Serial Printer (Adafruit Mini TTL)
+1. Connect printer to Pi GPIO:
+   - Printer TX → Pi RX (GPIO 15)
+   - Printer RX → Pi TX (GPIO 14)
+   - Printer GND → Pi GND
+2. Connect printer to separate 5-9V power supply
+3. Enable serial port:
+   ```bash
+   sudo raspi-config
+   # Navigate to: Interface Options → Serial Port → Enable
+   ```
+
+## Step 2: Twilio Setup (3 minutes)
+
+1. **Create Twilio Account**
+   - Go to [twilio.com](https://www.twilio.com)
+   - Sign up for free account ($15 credit)
+
+2. **Get Phone Number**
+   - Console → Phone Numbers → Buy a number
+   - Choose number with SMS capability
+   - Note your phone number
+
+3. **Get API Credentials**
+   - Console → Account → API credentials
+   - Copy Account SID (starts with `AC...`)
+   - Copy Auth Token (click to reveal)
+
+## Step 3: Software Installation (5 minutes)
+
+1. **Install Dependencies**
+   ```bash
+   sudo apt-get update
+   sudo apt-get install -y python3-pip python3-dev libusb-1.0-0-dev
+   ```
+
+2. **Clone Repository**
+   ```bash
+   cd ~
+   git clone https://github.com/yourusername/KID-FAX.git
+   cd KID-FAX
+   ```
+
+3. **Install Python Packages**
+   ```bash
+   pip3 install -r requirements.txt
+   ```
+
+4. **Configure Environment**
+   ```bash
+   cp .env.example .env
+   nano .env
+   ```
+
+5. **Edit `.env` with Your Settings**
+
+   **Required:**
+   ```bash
+   TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+   TWILIO_AUTH_TOKEN=your_auth_token_here
+   TWILIO_NUMBER=+15551234567
+   ALLOWLIST=+15551112222,+15553334444
+   CONTACTS=grandma:+15551112222,uncle:+15553334444
+   ```
+
+   **USB Printer:**
+   ```bash
+   PRINTER_TYPE=usb
+   USB_VENDOR=0x0416
+   USB_PRODUCT=0x5011
+   ```
+
+   Find your printer IDs with `lsusb`
+
+   **Serial Printer:**
+   ```bash
+   PRINTER_TYPE=serial
+   SERIAL_PORT=/dev/serial0
+   SERIAL_BAUD=19200
+   ```
+
+6. **Set Permissions (USB Printer)**
+   ```bash
+   sudo usermod -a -G lp,dialout $USER
+   # Log out and log back in
+   ```
+
+## Step 4: Test Run (2 minutes)
+
+1. **Start Kid Fax**
+   ```bash
+   python -m kidfax.sms_poller
+   ```
+
+   You should see:
+   ```
+   [2025-12-14 10:00:00] INFO: Starting Kid Fax SMS poller...
+   [2025-12-14 10:00:00] INFO: Connecting to USB printer (vendor=0x416, product=0x5011)
+   [2025-12-14 10:00:00] INFO: Printer connected successfully
+   [2025-12-14 10:00:01] INFO: Polling Twilio for new messages...
+   ```
+
+2. **Send Test Message**
+   - From a phone number in your ALLOWLIST
+   - Text your Twilio number: "Hello Kid Fax!"
+   - Within 15 seconds, it should print!
+
+3. **Test Reply**
+   ```bash
+   # In another terminal (or press Ctrl+C first)
+   python -m kidfax.send_sms grandma "Got your message!"
+   ```
+
+## Step 5: Auto-Start on Boot (Optional)
+
+See [SYSTEMD_SETUP.md](SYSTEMD_SETUP.md) for complete systemd service configuration.
+
+**Quick version:**
+```bash
+sudo nano /etc/systemd/system/kidfax.service
+```
+
+Paste this:
+```ini
+[Unit]
+Description=Kid Fax SMS Poller
+After=network-online.target
+
+[Service]
+User=pi
+EnvironmentFile=/home/pi/KID-FAX/.env
+WorkingDirectory=/home/pi/KID-FAX
+ExecStart=/usr/bin/python3 -m kidfax.sms_poller
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and start:
+```bash
+sudo systemctl enable kidfax
+sudo systemctl start kidfax
+sudo systemctl status kidfax
+```
+
+## Troubleshooting
+
+### Printer Not Found
+
+**USB Printer:**
+```bash
+# Check if detected
+lsusb
+
+# Should see something like: ID 0416:5011
+# Update .env with these IDs
+```
+
+**Serial Printer:**
+```bash
+# Check serial port exists
+ls /dev/serial*
+
+# Enable if needed
+sudo raspi-config
+```
+
+### No Messages Printing
+
+1. **Check ALLOWLIST**: Sender must be in the allowlist
+   ```bash
+   # In .env:
+   ALLOWLIST=+15551112222,+15553334444
+   ```
+
+2. **Check Twilio Credentials**: Test sending
+   ```bash
+   python -m kidfax.send_sms +15551234567 "Test"
+   ```
+
+3. **Check Logs**
+   ```bash
+   # If running manually
+   # Look at terminal output
+
+   # If running as service
+   sudo journalctl -u kidfax -f
+   ```
+
+### Test Without Printer
 
 ```bash
-# Create GitHub repo (on github.com first), then:
-git add .
-git commit -m "Ready for Netlify deployment"
-git remote add origin https://github.com/YOUR_USERNAME/ticket-printer-app.git
-git branch -M main
-git push -u origin main
+export ALLOW_DUMMY_PRINTER=true
+python -m kidfax.sms_poller
 ```
 
-### 2. Deploy to Netlify (2 minutes)
+This prints to console instead of hardware.
 
-1. Go to https://netlify.com → Sign up/Login
-2. Click "Add new site" → "Import from Git"
-3. Select your repository
-4. **Settings:**
-   - Build command: `echo "No build required"`
-   - Publish directory: `frontend`
-5. Click "Deploy site"
-6. **Copy your site URL** (e.g., `amazing-ticket-app.netlify.app`)
+## Next Steps
 
-### 3. Set Up Raspberry Pi (3 minutes)
+- **Set up contacts**: Add family members to `.env` CONTACTS
+- **Adjust polling**: Change POLL_SECONDS (default 15)
+- **Add e-ink display**: See README for e-ink setup
+- **Learn more**: Read [DEPLOYMENT.md](DEPLOYMENT.md) for advanced configuration
 
+## Quick Reference
+
+### Start Kid Fax
 ```bash
-# SSH into your Pi
-ssh pi@raspberrypi.local
-
-# Clone the repo
-git clone https://github.com/YOUR_USERNAME/ticket-printer-app.git
-cd ticket-printer-app/backend
-
-# Install dependencies
-pip3 install -r requirements.txt
-
-# Configure printer (if needed)
-sudo lsusb  # Get printer vendor/product IDs
-nano api.py  # Update IDs if different
-
-# Start the API
-python3 api.py
+python -m kidfax.sms_poller
 ```
 
-### 4. Expose API with ngrok (1 minute)
-
+### Send Reply
 ```bash
-# On Raspberry Pi
-# Download ngrok
-wget https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-arm.tgz
-tar -xvzf ngrok-v3-stable-linux-arm.tgz
-sudo mv ngrok /usr/local/bin/
-
-# Start tunnel
-ngrok http 5000
-
-# COPY the HTTPS URL (e.g., https://abc123.ngrok.io)
+python -m kidfax.send_sms grandma "Hi!"
 ```
 
-### 5. Connect Frontend to API (2 minutes)
-
-**Option A: Edit the code**
+### View Logs (if running as service)
 ```bash
-# Open frontend/index.html on your computer
-# Line 196 - replace:
-const productionApiUrl = 'https://YOUR-NGROK-URL.ngrok.io';
-
-# Push the change
-git add frontend/index.html
-git commit -m "Update API URL"
-git push
+sudo journalctl -u kidfax -f
 ```
-Netlify will auto-deploy!
 
-**Option B: Use Netlify environment variable**
-1. Netlify dashboard → Site settings → Environment variables
-2. Add: `REACT_APP_API_URL` = `https://your-ngrok-url.ngrok.io`
-3. Deploy settings → Trigger deploy
-
-## Test It! 🎉
-
-1. Visit your Netlify site
-2. Fill out the form
-3. Submit a ticket
-4. Check your Raspberry Pi - it should print!
-
-## File Structure
-
+### Restart Service
+```bash
+sudo systemctl restart kidfax
 ```
-ticket-printer-app/
-├── frontend/              ← Deploy THIS to Netlify
-│   └── index.html
-├── backend/               ← Run THIS on Raspberry Pi
-│   ├── api.py
-│   └── requirements.txt
-├── app.py                 ← Original (can be ignored)
-├── netlify.toml           ← Netlify configuration
-├── README_NETLIFY.md      ← Quick start guide
-├── GITHUB_DEPLOYMENT.md   ← Detailed deployment
-└── .gitignore             ← Git configuration
+
+### Edit Configuration
+```bash
+nano ~/KID-FAX/.env
+sudo systemctl restart kidfax  # If running as service
 ```
 
 ## Need Help?
 
-- **Quick guide**: `README_NETLIFY.md`
-- **Full deployment**: `GITHUB_DEPLOYMENT.md`
-- **Raspberry Pi setup**: `DEPLOYMENT.md`
-
-## What's Next?
-
-After basic deploy is working:
-1. Keep ngrok running with systemd (see GITHUB_DEPLOYMENT.md)
-2. Add API authentication for security
-3. Set up Cloudflare tunnel for persistence
-4. Monitor with logging
-
-## Architecture
-
-```
-User's Browser
-     ↓
-Netlify (Frontend)
-     ↓
-ngrok/Cloudflare Tunnel
-     ↓
-Raspberry Pi API
-     ↓
-Thermal Printer
-```
+- **Full Documentation**: [README.md](README.md)
+- **Systemd Setup**: [SYSTEMD_SETUP.md](SYSTEMD_SETUP.md)
+- **Twilio Details**: [TWILIO_SETUP.md](TWILIO_SETUP.md)
+- **Troubleshooting**: [DEPLOYMENT.md](DEPLOYMENT.md)
+- **Issues**: [GitHub Issues](https://github.com/yourusername/KID-FAX/issues)
 
 ---
 
-**That's it! You should be printing in about 10 minutes.** 🚀
-
-
+**You're done!** 🎉 Your Kid Fax SMS mailbox is ready to receive family messages!
