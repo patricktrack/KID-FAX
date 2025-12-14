@@ -38,9 +38,14 @@ Desktop.ini
 *.log
 .env
 .env.local
+*.env
+!.env.example
 ngrok
 cloudflared
 *.tar.gz
+
+# Kid Fax state
+.kidfax_state.json
 
 # Backup files
 *.bak
