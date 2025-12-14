@@ -105,6 +105,7 @@ python -m kidfax.sms_poller
 
 ## How It Works
 
+**Receiving Messages:**
 ```
 📱 Family Member's Phone
     ↓
@@ -121,7 +122,16 @@ python -m kidfax.sms_poller
 📄 Physical Receipt
 
 🎨 Optional: E-ink badge updates
-⌨️  Reply: python -m kidfax.send_sms grandma "Hi!"
+```
+
+**Sending Replies:**
+```
+⌨️  Option 1: CLI
+    python -m kidfax.send_sms grandma "Hi!"
+
+🎹 Option 2: Interactive Keyboard Mode
+    Press F1 (Grandma) → Type message → Press Enter → Send!
+    📺 E-ink display shows recipient and message in real-time
 ```
 
 ## Configuration
@@ -194,7 +204,7 @@ sudo journalctl -u kidfax -f
 
 ### Sending Replies
 
-Kids can reply to messages from the Pi keyboard:
+**Option 1: Command Line** (quick replies)
 
 ```bash
 # Reply by contact name
@@ -203,6 +213,32 @@ python -m kidfax.send_sms grandma "Thanks for the message!"
 # Reply by phone number
 python -m kidfax.send_sms +15551112222 "Hi Grandma!"
 ```
+
+**Option 2: Interactive Keyboard Mode** (kid-friendly!)
+
+Press function keys to select recipients - perfect for kids on Raspberry Pi 400!
+
+```bash
+# Start interactive keyboard mode
+python -m kidfax.interactive_keyboard
+```
+
+**How it works:**
+1. Press **F1-F12** to select a recipient (each key = family member)
+2. **Type your message** and watch it appear on e-ink display
+3. Press **Enter** to send
+4. ✓ Message sent! (optional receipt prints)
+
+**Physical Setup:**
+- Add stickers above F1-F12 keys with contact names
+- Perfect for Raspberry Pi 400 Computer Kit (built-in keyboard)
+- E-ink display shows recipient and message in real-time
+
+See [KEYBOARD_MODE.md](KEYBOARD_MODE.md) for complete interactive mode guide including:
+- Physical sticker templates
+- F-key contact mapping
+- E-ink display layouts
+- Troubleshooting keyboard shortcuts
 
 ## Safety & Privacy
 
@@ -279,10 +315,14 @@ KID-FAX/
 ├── kidfax/                 # Core Kid Fax module
 │   ├── printer.py          # Printer abstraction (USB/Serial/Network/Bluetooth)
 │   ├── sms_poller.py       # Twilio SMS polling service
-│   └── send_sms.py         # CLI tool for sending replies
+│   ├── send_sms.py         # CLI tool for sending replies
+│   ├── interactive_keyboard.py  # Interactive keyboard messaging mode
+│   ├── keyboard_input.py   # Keyboard event handling and F-key mapping
+│   └── eink_display.py     # E-ink display utilities
 ├── .env.example            # Configuration template
 ├── requirements.txt        # Python dependencies
 ├── QUICK_START.md          # 15-minute setup guide
+├── KEYBOARD_MODE.md        # Interactive keyboard mode guide
 ├── TWILIO_SETUP.md         # Twilio configuration
 ├── SYSTEMD_SETUP.md        # Auto-start service setup
 ├── DEPLOYMENT.md           # Complete deployment guide

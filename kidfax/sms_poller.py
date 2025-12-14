@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import datetime as dt
-import importlib
 import json
 import logging
 import os
@@ -15,6 +14,7 @@ from typing import Dict, List, Optional, Set
 from twilio.rest import Client
 
 from kidfax.printer import get_printer
+from kidfax.eink_display import init_display, render_polling_status
 
 LOG = logging.getLogger("kidfax.sms")
 
@@ -22,7 +22,6 @@ DEFAULT_STATE_FILE = Path.home() / ".kidfax_state.json"
 ENCODING = os.getenv("PRINTER_ENCODING", "cp437")
 LINE_WIDTH = int(os.getenv("PRINTER_LINE_WIDTH", "32"))
 ALLOW_DUMMY = os.getenv("ALLOW_DUMMY_PRINTER", "false").lower() in {"1", "true", "yes"}
-EINK_ENABLED = os.getenv("EINK_STATUS_ENABLED", "false").lower() in {"1", "true", "yes"}
 
 
 def _required_env(name: str) -> str:
@@ -91,40 +90,6 @@ def _save_state(order: List[str]) -> None:
     STATE_FILE.write_text(json.dumps(payload), encoding="utf-8")
 
 
-def _update_eink(new_count: int, sender_label: Optional[str]) -> None:
-    if not EINK_ENABLED or new_count <= 0:
-        return
-    try:
-        from PIL import Image, ImageDraw, ImageFont
-
-        module_path = os.getenv(
-            "EINK_DRIVER_PACKAGE",
-            "e-Paper.RaspberryPi_JetsonNano.python.lib.waveshare_epd",
-        )
-        module_name = os.getenv("EINK_DRIVER_MODULE", "epd2in9d")
-        module = importlib.import_module(f"{module_path}.{module_name}")
-        epd = module.EPD()
-        epd.init()
-        epd.Clear(0xFF)
-
-        width, height = epd.width, epd.height
-        image = Image.new('1', (width, height), 255)
-        draw = ImageDraw.Draw(image)
-        font = ImageFont.load_default()
-
-        draw.text((10, 10), HEADER_TEXT, font=font, fill=0)
-        draw.text((10, 26), SUBTITLE_TEXT, font=font, fill=0)
-        draw.text((10, 44), f"New: {new_count}", font=font, fill=0)
-        if sender_label:
-            draw.text((10, 62), f"Last: {sender_label}", font=font, fill=0)
-
-        draw.rectangle((10, height - 20, width - 10, height - 18), fill=0)
-        epd.display(epd.getbuffer(image))
-        epd.sleep()
-    except Exception as exc:  # pragma: no cover - hardware
-        LOG.debug("Skipping e-ink update (%s)", exc)
-
-
 def _print_message(printer: object, sender: str, body: str) -> None:
     now = dt.datetime.now().strftime("%Y-%m-%d %H:%M")
     printer.set(align='center', font='a', width=2, height=2, bold=True)
@@ -183,6 +148,9 @@ def poll_loop() -> None:
 
     LOG.info("Kid Fax SMS poller started (polling every %ss)", POLL_SECONDS)
 
+    # Initialize e-ink display
+    epd = init_display()
+
     printer = None
     while True:
         try:
@@ -215,7 +183,7 @@ def poll_loop() -> None:
                 state_dirty = True
 
             if printed_now:
-                _update_eink(printed_now, last_sender)
+                render_polling_status(epd, printed_now, last_sender)
             if state_dirty:
                 overflow = len(seen_order) - MAX_STATE
                 if overflow > 0:
