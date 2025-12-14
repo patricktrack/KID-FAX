@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kid Fax Admin Panel</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        h2 {
+            color: #444;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            font-size: 20px;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 5px;
+        }
+
+        .info-box {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 12px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .warning-box {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 12px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #555;
+        }
+
+        tr:hover {
+            background: #f8f9fa;
+        }
+
+        button {
+            padding: 8px 16px;
+            margin: 5px 5px 5px 0;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #0056b3;
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #1e7e34;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+
+        .btn-large {
+            font-size: 16px;
+            padding: 12px 24px;
+            font-weight: 600;
+        }
+
+        .contact-list {
+            list-style: none;
+            margin-bottom: 15px;
+        }
+
+        .contact-list li {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .contact-list li:hover {
+            background: #f8f9fa;
+        }
+
+        .contact-number {
+            font-family: monospace;
+            color: #666;
+        }
+
+        .actions {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 2px solid #eee;
+            text-align: center;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: white;
+            max-width: 500px;
+            margin: 100px auto;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+
+        .modal h3 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #007bff;
+        }
+
+        .modal-buttons {
+            margin-top: 20px;
+            text-align: right;
+        }
+
+        .fkey-badge {
+            background: #6c757d;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-right: 10px;
+        }
+
+        .message {
+            padding: 12px;
+            margin: 15px 0;
+            border-radius: 4px;
+            display: none;
+        }
+
+        .message.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🖨️ Kid Fax Admin Panel</h1>
+        <p class="subtitle">Manage contacts and security settings</p>
+
+        <div id="message" class="message"></div>
+
+        <!-- Contacts Section -->
+        <h2>📇 Contacts (Keyboard Mode)</h2>
+
+        {% if contact_count >= max_contacts %}
+        <div class="warning-box">
+            ⚠️ <strong>Maximum contacts reached!</strong> You have {{ contact_count }}/{{ max_contacts }} contacts.
+            Delete a contact before adding new ones (F1-F12 keyboard limit).
+        </div>
+        {% endif %}
+
+        <div class="info-box">
+            ℹ️ Function keys F1-F12 are mapped to contacts in alphabetical order.
+            Add physical stickers above each key!
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 80px;">F-Key</th>
+                    <th>Name</th>
+                    <th>Phone Number</th>
+                    {% if avatar_enabled %}<th style="width: 100px; text-align: center;">Avatar</th>{% endif %}
+                    <th style="width: 300px;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if contacts %}
+                    {% for fkey, name, number, has_avatar in contacts %}
+                    <tr>
+                        <td><span class="fkey-badge">{{ fkey }}</span></td>
+                        <td>{{ name }}</td>
+                        <td class="contact-number">{{ number }}</td>
+                        {% if avatar_enabled %}
+                        <td style="text-align: center;">
+                            {% if has_avatar %}
+                                <img src="/admin/avatars/{{ name }}.png"
+                                     alt="{{ name }}"
+                                     style="width: 48px; height: 48px; image-rendering: pixelated; image-rendering: crisp-edges; border: 1px solid #ddd; border-radius: 4px;">
+                            {% else %}
+                                <span style="color: #999; font-size: 12px;">—</span>
+                            {% endif %}
+                        </td>
+                        {% endif %}
+                        <td>
+                            <button class="btn-primary" onclick="editContact('{{ name }}', '{{ number }}')">Edit</button>
+                            {% if avatar_enabled %}
+                                {% if has_avatar %}
+                                    <button class="btn-secondary" onclick="uploadAvatar('{{ name }}')">Change Avatar</button>
+                                    <button class="btn-danger" onclick="deleteAvatar('{{ name }}')">Delete Avatar</button>
+                                {% else %}
+                                    <button class="btn-success" onclick="uploadAvatar('{{ name }}')">+ Add Avatar</button>
+                                {% endif %}
+                            {% endif %}
+                            <button class="btn-danger" onclick="deleteContact('{{ name }}')">Delete</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="{% if avatar_enabled %}5{% else %}4{% endif %}" style="text-align: center; color: #999;">
+                            No contacts configured. Add your first contact below!
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+
+        <button class="btn-success" onclick="showAddContactModal()" {% if contact_count >= max_contacts %}disabled{% endif %}>
+            + Add Contact
+        </button>
+
+        <!-- Allowlist Section -->
+        <h2>🛡️ Allowlist (Security)</h2>
+
+        <div class="info-box">
+            ℹ️ Only phone numbers in the allowlist can send messages to Kid Fax.
+            This protects your kids from unknown senders.
+        </div>
+
+        <ul class="contact-list">
+            {% if allowlist %}
+                {% for number in allowlist %}
+                <li>
+                    <span class="contact-number">{{ number }}</span>
+                    <button class="btn-danger" onclick="removeFromAllowlist('{{ number }}')">Remove</button>
+                </li>
+                {% endfor %}
+            {% else %}
+                <li style="color: #999; text-align: center;">
+                    No numbers in allowlist (all senders allowed - not recommended!)
+                </li>
+            {% endif %}
+        </ul>
+
+        <button class="btn-success" onclick="showAddAllowlistModal()">+ Add Number</button>
+
+        <!-- Actions -->
+        <div class="actions">
+            <button class="btn-primary btn-large" onclick="window.location.reload()">
+                🔄 Reload Page
+            </button>
+            <button class="btn-secondary btn-large" onclick="restartService()">
+                🔄 Restart Kid Fax Service
+            </button>
+        </div>
+    </div>
+
+    <!-- Add Contact Modal -->
+    <div id="addContactModal" class="modal">
+        <div class="modal-content">
+            <h3>Add New Contact</h3>
+            <div class="form-group">
+                <label for="newContactName">Contact Name</label>
+                <input type="text" id="newContactName" placeholder="e.g., grandma" maxlength="50">
+            </div>
+            <div class="form-group">
+                <label for="newContactNumber">Phone Number (E.164 format)</label>
+                <input type="tel" id="newContactNumber" placeholder="+15551234567">
+            </div>
+            <div class="modal-buttons">
+                <button class="btn-secondary" onclick="closeModal('addContactModal')">Cancel</button>
+                <button class="btn-success" onclick="addContact()">Add Contact</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Contact Modal -->
+    <div id="editContactModal" class="modal">
+        <div class="modal-content">
+            <h3>Edit Contact</h3>
+            <input type="hidden" id="editContactOldName">
+            <div class="form-group">
+                <label for="editContactName">Contact Name</label>
+                <input type="text" id="editContactName" maxlength="50">
+            </div>
+            <div class="form-group">
+                <label for="editContactNumber">Phone Number (E.164 format)</label>
+                <input type="tel" id="editContactNumber" placeholder="+15551234567">
+            </div>
+            <div class="modal-buttons">
+                <button class="btn-secondary" onclick="closeModal('editContactModal')">Cancel</button>
+                <button class="btn-primary" onclick="saveContactEdit()">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add to Allowlist Modal -->
+    <div id="addAllowlistModal" class="modal">
+        <div class="modal-content">
+            <h3>Add to Allowlist</h3>
+            <div class="form-group">
+                <label for="newAllowlistNumber">Phone Number (E.164 format)</label>
+                <input type="tel" id="newAllowlistNumber" placeholder="+15551234567">
+            </div>
+            <div class="modal-buttons">
+                <button class="btn-secondary" onclick="closeModal('addAllowlistModal')">Cancel</button>
+                <button class="btn-success" onclick="addToAllowlist()">Add Number</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Upload Avatar Modal -->
+    <div id="uploadAvatarModal" class="modal">
+        <div class="modal-content">
+            <h3>Upload Avatar for <span id="avatarContactNameDisplay"></span></h3>
+            <input type="hidden" id="avatarContactName">
+
+            <div class="info-box" style="background: #e7f3ff;">
+                📸 <strong>Tips for best results:</strong>
+                <ul style="margin: 10px 0 0 20px; padding-left: 0; list-style-position: inside;">
+                    <li>Use square images (64x64 to 128x128 pixels recommended)</li>
+                    <li>High contrast images work best for pixel art conversion</li>
+                    <li>Image will be converted to black/white automatically</li>
+                    <li>PNG format only (max 5MB)</li>
+                </ul>
+            </div>
+
+            <div class="form-group">
+                <label for="avatarFile">Select PNG Image</label>
+                <input type="file" id="avatarFile" accept="image/png" style="padding: 10px; border: 2px dashed #ddd; border-radius: 4px; cursor: pointer;">
+            </div>
+
+            <div id="avatarPreview" style="text-align: center; margin: 15px 0; display: none;">
+                <p style="margin-bottom: 8px;"><strong>Preview:</strong></p>
+                <img id="avatarPreviewImg" style="max-width: 128px; max-height: 128px; border: 1px solid #ddd; border-radius: 4px; image-rendering: pixelated; image-rendering: crisp-edges;">
+            </div>
+
+            <div class="modal-buttons">
+                <button class="btn-secondary" onclick="closeModal('uploadAvatarModal')">Cancel</button>
+                <button class="btn-success" onclick="submitAvatar()">Upload Avatar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Show/hide modals
+        function showAddContactModal() {
+            document.getElementById('newContactName').value = '';
+            document.getElementById('newContactNumber').value = '';
+            document.getElementById('addContactModal').style.display = 'block';
+        }
+
+        function editContact(name, number) {
+            document.getElementById('editContactOldName').value = name;
+            document.getElementById('editContactName').value = name;
+            document.getElementById('editContactNumber').value = number;
+            document.getElementById('editContactModal').style.display = 'block';
+        }
+
+        function showAddAllowlistModal() {
+            document.getElementById('newAllowlistNumber').value = '';
+            document.getElementById('addAllowlistModal').style.display = 'block';
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        }
+
+        // Show message
+        function showMessage(text, type) {
+            const msg = document.getElementById('message');
+            msg.textContent = text;
+            msg.className = 'message ' + type;
+            msg.style.display = 'block';
+            setTimeout(() => { msg.style.display = 'none'; }, 5000);
+        }
+
+        // Add contact
+        async function addContact() {
+            const name = document.getElementById('newContactName').value.trim();
+            const number = document.getElementById('newContactNumber').value.trim();
+
+            if (!name || !number) {
+                showMessage('Please fill in both name and number', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/admin/contacts/add', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({name, number})
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage(data.message, 'success');
+                    closeModal('addContactModal');
+                    setTimeout(() => window.location.reload(), 1000);
+                } else {
+                    showMessage(data.error, 'error');
+                }
+            } catch (error) {
+                showMessage('Error adding contact: ' + error, 'error');
+            }
+        }
+
+        // Save contact edit
+        async function saveContactEdit() {
+            const oldName = document.getElementById('editContactOldName').value;
+            const newName = document.getElementById('editContactName').value.trim();
+            const newNumber = document.getElementById('editContactNumber').value.trim();
+
+            if (!newName || !newNumber) {
+                showMessage('Please fill in both name and number', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/admin/contacts/edit', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({old_name: oldName, new_name: newName, new_number: newNumber})
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage(data.message, 'success');
+                    closeModal('editContactModal');
+                    setTimeout(() => window.location.reload(), 1000);
+                } else {
+                    showMessage(data.error, 'error');
+                }
+            } catch (error) {
+                showMessage('Error editing contact: ' + error, 'error');
+            }
+        }
+
+        // Delete contact
+        async function deleteContact(name) {
+            if (!confirm(`Delete contact "${name}"?`)) return;
+
+            try {
+                const response = await fetch('/admin/contacts/delete', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({name})
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage(data.message, 'success');
+                    setTimeout(() => window.location.reload(), 1000);
+                } else {
+                    showMessage(data.error, 'error');
+                }
+            } catch (error) {
+                showMessage('Error deleting contact: ' + error, 'error');
+            }
+        }
+
+        // Add to allowlist
+        async function addToAllowlist() {
+            const number = document.getElementById('newAllowlistNumber').value.trim();
+
+            if (!number) {
+                showMessage('Please enter a phone number', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/admin/allowlist/add', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({number})
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage(data.message, 'success');
+                    closeModal('addAllowlistModal');
+                    setTimeout(() => window.location.reload(), 1000);
+                } else {
+                    showMessage(data.error, 'error');
+                }
+            } catch (error) {
+                showMessage('Error adding to allowlist: ' + error, 'error');
+            }
+        }
+
+        // Remove from allowlist
+        async function removeFromAllowlist(number) {
+            if (!confirm(`Remove ${number} from allowlist?`)) return;
+
+            try {
+                const response = await fetch('/admin/allowlist/delete', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({number})
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage(data.message, 'success');
+                    setTimeout(() => window.location.reload(), 1000);
+                } else {
+                    showMessage(data.error, 'error');
+                }
+            } catch (error) {
+                showMessage('Error removing from allowlist: ' + error, 'error');
+            }
+        }
+
+        // Restart service
+        async function restartService() {
+            if (!confirm('Restart Kid Fax service? This will reload the configuration.')) return;
+
+            try {
+                const response = await fetch('/admin/restart', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'}
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage(data.message, 'success');
+                } else {
+                    showMessage(data.error, 'error');
+                }
+            } catch (error) {
+                showMessage('Error restarting service: ' + error, 'error');
+            }
+        }
+
+        // Avatar management
+        function uploadAvatar(contactName) {
+            document.getElementById('avatarContactName').value = contactName;
+            document.getElementById('avatarContactNameDisplay').textContent = contactName;
+            document.getElementById('avatarFile').value = '';
+            document.getElementById('avatarPreview').style.display = 'none';
+            document.getElementById('uploadAvatarModal').style.display = 'block';
+        }
+
+        // Preview avatar before upload
+        document.addEventListener('DOMContentLoaded', function() {
+            const fileInput = document.getElementById('avatarFile');
+            if (fileInput) {
+                fileInput.addEventListener('change', function(e) {
+                    const file = e.target.files[0];
+                    if (file) {
+                        const reader = new FileReader();
+                        reader.onload = function(event) {
+                            const preview = document.getElementById('avatarPreview');
+                            const img = document.getElementById('avatarPreviewImg');
+                            img.src = event.target.result;
+                            preview.style.display = 'block';
+                        };
+                        reader.readAsDataURL(file);
+                    }
+                });
+            }
+        });
+
+        // Submit avatar upload
+        async function submitAvatar() {
+            const contactName = document.getElementById('avatarContactName').value;
+            const fileInput = document.getElementById('avatarFile');
+            const file = fileInput.files[0];
+
+            if (!file) {
+                showMessage('Please select a PNG file', 'error');
+                return;
+            }
+
+            if (!file.name.toLowerCase().endsWith('.png')) {
+                showMessage('Only PNG files are allowed', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('contact_name', contactName);
+            formData.append('avatar_file', file);
+
+            try {
+                const response = await fetch('/admin/avatars/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage(data.message, 'success');
+                    closeModal('uploadAvatarModal');
+                    setTimeout(() => window.location.reload(), 1000);
+                } else {
+                    showMessage(data.error, 'error');
+                }
+            } catch (error) {
+                showMessage('Error uploading avatar: ' + error, 'error');
+            }
+        }
+
+        // Delete avatar
+        async function deleteAvatar(contactName) {
+            if (!confirm(`Delete avatar for "${contactName}"?`)) return;
+
+            try {
+                const response = await fetch('/admin/avatars/delete', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({contact_name: contactName})
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage(data.message, 'success');
+                    setTimeout(() => window.location.reload(), 1000);
+                } else {
+                    showMessage(data.error, 'error');
+                }
+            } catch (error) {
+                showMessage('Error deleting avatar: ' + error, 'error');
+            }
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            if (event.target.classList.contains('modal')) {
+                event.target.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>

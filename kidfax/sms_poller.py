@@ -11,10 +11,12 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional, Set
 
+from PIL import Image
 from twilio.rest import Client
 
-from kidfax.printer import get_printer
+from kidfax.avatar_manager import ensure_avatar_dir, get_avatar_path
 from kidfax.eink_display import init_display, render_polling_status
+from kidfax.printer import get_printer
 
 LOG = logging.getLogger("kidfax.sms")
 
@@ -61,6 +63,14 @@ def _contact_label(number: str) -> str:
     return number
 
 
+def _extract_contact_name(number: str) -> Optional[str]:
+    """Extract contact name from phone number."""
+    for name, stored in CONTACTS.items():
+        if stored == number:
+            return name
+    return None
+
+
 def _wrap_text(value: str) -> List[str]:
     lines: List[str] = []
     for para in value.splitlines() or [""]:
@@ -91,6 +101,8 @@ def _save_state(order: List[str]) -> None:
 
 
 def _print_message(printer: object, sender: str, body: str) -> None:
+    """Print SMS receipt with optional avatar."""
+    # 1. Header
     now = dt.datetime.now().strftime("%Y-%m-%d %H:%M")
     printer.set(align='center', font='a', width=2, height=2, bold=True)
     printer.text(f"{HEADER_TEXT}\n")
@@ -99,13 +111,33 @@ def _print_message(printer: object, sender: str, body: str) -> None:
     printer.text(f"{now}\n")
     printer.text("-" * LINE_WIDTH + "\n")
 
+    # 2. Avatar (if enabled and exists)
+    avatar_enabled = os.getenv("AVATAR_ENABLED", "true").lower() in {"1", "true", "yes"}
+    if avatar_enabled:
+        contact_name = _extract_contact_name(sender)
+        if contact_name:
+            avatar_path = get_avatar_path(contact_name)
+            if avatar_path and avatar_path.exists():
+                try:
+                    img = Image.open(avatar_path)
+                    printer.set(align='center')
+                    printer.text("\n")  # spacing before avatar
+                    printer.image(img)
+                    printer.text("\n")  # spacing after avatar
+                    LOG.debug(f"Printed avatar for {contact_name}")
+                except Exception as exc:
+                    LOG.warning(f"Failed to print avatar for {contact_name}: {exc}")
+
+    # 3. Sender name
     printer.set(align='left', font='a', width=1, height=1, bold=True)
     printer.text(f"From: {_contact_label(sender)}\n\n")
 
+    # 4. Message body
     printer.set(align='left', font='a', width=1, height=1, bold=False)
     for line in _wrap_text(_sanitize(body)):
         printer.text(line + "\n")
 
+    # 5. Footer
     printer.text("\n")
     try:
         printer.cut()
@@ -147,6 +179,9 @@ def poll_loop() -> None:
     last_sender: Optional[str] = None
 
     LOG.info("Kid Fax SMS poller started (polling every %ss)", POLL_SECONDS)
+
+    # Initialize avatar directory
+    ensure_avatar_dir()
 
     # Initialize e-ink display
     epd = init_display()

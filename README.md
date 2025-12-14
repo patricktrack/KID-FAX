@@ -50,7 +50,22 @@ Perfect for:
 - Buy: [Bluetooth Keyboard/Mouse](https://amzn.to/4akjutW)
 - Buy: [HDMI Monitor](https://amzn.to/4rsK620)
 
-## Quick Start
+## 🚀 New User? Start Here!
+
+**Complete Setup Guide for Non-Technical Users**: See **[SETUP_GUIDE.md](SETUP_GUIDE.md)**
+
+This guide walks you through everything step-by-step:
+- ✅ Hardware assembly with pictures
+- ✅ Software installation (copy/paste commands)
+- ✅ Twilio account setup
+- ✅ Testing your first message
+- ✅ Troubleshooting common issues
+
+**Time**: 30-45 minutes from unboxing to first printed message!
+
+---
+
+## Quick Start (For Technical Users)
 
 ### 1. Hardware Assembly (5 minutes)
 
@@ -240,6 +255,78 @@ See [KEYBOARD_MODE.md](KEYBOARD_MODE.md) for complete interactive mode guide inc
 - E-ink display layouts
 - Troubleshooting keyboard shortcuts
 
+### Managing Contacts
+
+**Admin Web Interface** (easiest way to manage contacts!)
+
+Start the admin UI:
+```bash
+python -m kidfax.admin_web
+```
+
+Open browser: `http://localhost:5000/admin`
+
+**Features**:
+- 🌐 Browser-based UI for managing contacts and allowlist
+- ✏️ Add, edit, and delete contacts with validation
+- 🛡️ Manage security allowlist (who can send messages)
+- 📊 See F-key mapping (F1-F12 for keyboard mode)
+- 🔄 Restart service to apply changes
+- 🔐 Password-protected (set `ADMIN_PASSWORD` in .env)
+
+**Alternative: Manual .env Editing**
+
+For advanced users or when the web UI isn't available:
+
+```bash
+nano .env
+# Edit CONTACTS and ALLOWLIST manually
+sudo systemctl restart kidfax
+```
+
+See [ADMIN_WEB.md](ADMIN_WEB.md) for complete admin interface guide including:
+- Setup instructions
+- Phone number format (E.164)
+- Security best practices
+- Troubleshooting
+
+### Contact Avatars
+
+Add pixel art portraits to printed receipts! Avatars appear between the header and message text.
+
+**Upload avatars via admin UI**:
+1. Start admin UI: `python -m kidfax.admin_web`
+2. Open: `http://localhost:5000/admin`
+3. Click "Add Avatar" next to any contact
+4. Upload a square PNG image (will be converted to pixel art)
+5. Avatar prints on all messages from that contact
+
+**Tips for best results**:
+- Use square images (64x64 to 128x128 pixels recommended)
+- High contrast images work best (faces, logos, simple icons)
+- Images are automatically converted to black/white pixel art
+- PNG format only (max 5MB)
+
+**Configuration** (in `.env`):
+```bash
+AVATAR_ENABLED=true        # Enable/disable avatar printing
+AVATAR_SIZE=96             # Avatar size in pixels (64, 96, or 128)
+AVATAR_DIR=/home/pi/.kidfax_avatars  # Storage directory
+```
+
+**Receipt with avatar**:
+```
+        Kid Fax                [header]
+      2024-01-15 14:30        [timestamp]
+    --------------------------------
+
+       [96x96 pixel avatar]     [centered]
+
+    From: Grandma (+1555...)    [sender]
+
+    Thanks for the cookies!     [message]
+```
+
 ## Safety & Privacy
 
 ### Kid Safety Features
@@ -318,11 +405,16 @@ KID-FAX/
 │   ├── send_sms.py         # CLI tool for sending replies
 │   ├── interactive_keyboard.py  # Interactive keyboard messaging mode
 │   ├── keyboard_input.py   # Keyboard event handling and F-key mapping
-│   └── eink_display.py     # E-ink display utilities
+│   ├── eink_display.py     # E-ink display utilities
+│   ├── admin_web.py        # Admin web interface (Flask)
+│   ├── config_manager.py   # .env file utilities
+│   └── templates/
+│       └── admin.html      # Admin UI template
 ├── .env.example            # Configuration template
 ├── requirements.txt        # Python dependencies
 ├── QUICK_START.md          # 15-minute setup guide
 ├── KEYBOARD_MODE.md        # Interactive keyboard mode guide
+├── ADMIN_WEB.md            # Admin web interface guide
 ├── TWILIO_SETUP.md         # Twilio configuration
 ├── SYSTEMD_SETUP.md        # Auto-start service setup
 ├── DEPLOYMENT.md           # Complete deployment guide
