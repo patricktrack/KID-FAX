@@ -1,0 +1,233 @@
+# Cursor Rules for KID-FAX Project
+
+## Project Overview
+This is a ticket printing application for Raspberry Pi that:
+- Provides a web interface for ticket submission
+- Prints tickets on ESC/POS thermal printers (USB, Serial, Network, Bluetooth)
+- Includes a "Kid Fax" SMS mailbox feature using Twilio
+- Supports optional e-ink display integration
+- Can be deployed as a full-stack app or separated frontend/backend
+
+## Architecture
+
+### Project Structure
+- `app.py` - Main Flask application (full-stack: UI + API)
+- `backend/api.py` - API-only Flask service (for Netlify frontend deployment)
+- `kidfax/` - Shared module containing:
+  - `printer.py` - Printer abstraction layer (USB, Serial, Network, Bluetooth)
+  - `sms_poller.py` - Twilio SMS polling service
+  - `send_sms.py` - CLI tool for sending SMS replies
+- `frontend/` - Static frontend files (HTML, JS, CSS)
+- `templates/` - Flask templates (for app.py)
+- `netlify/functions/` - Netlify serverless functions
+
+### Technology Stack
+- **Backend**: Python 3.7+, Flask 3.0.0
+- **Printer**: python-escpos 3.0a8 (ESC/POS protocol)
+- **SMS**: Twilio SDK 9.0.1
+- **Frontend**: Vanilla HTML/CSS/JavaScript (no framework)
+- **Deployment**: Raspberry Pi, Netlify (frontend), systemd services
+
+## Coding Standards
+
+### Python Style
+- Use Python 3.7+ features (type hints, f-strings, pathlib)
+- Follow PEP 8 with 4-space indentation
+- Use type hints for function parameters and return types: `def function(param: str) -> bool:`
+- Use `from __future__ import annotations` for forward references
+- Prefer `Optional[Type]` over `Type | None` for Python 3.7-3.9 compatibility
+- Use descriptive variable names, avoid abbreviations
+
+### Import Organization
+```python
+# Standard library imports
+import os
+import logging
+from typing import Optional, Dict, List
+
+# Third-party imports
+from flask import Flask, request, jsonify
+from twilio.rest import Client
+
+# Local imports
+from kidfax.printer import get_printer, print_ticket
+```
+
+### Error Handling
+- Always use try/except blocks for hardware interactions (printer, e-ink)
+- Log errors with appropriate levels: `logger.error()`, `logger.warning()`, `logger.info()`
+- Return meaningful error messages in API responses
+- Use `allow_dummy` parameter for printer fallback in testing
+- Never let hardware failures crash the main application loop
+
+### Logging
+- Use module-level loggers: `LOG = logging.getLogger(__name__)`
+- Configure logging with timestamps: `format="[%(asctime)s] %(levelname)s: %(message)s"`
+- Log levels: DEBUG for development details, INFO for normal operations, WARNING for recoverable issues, ERROR for failures
+- Example: `LOG.info("Connecting to USB printer (vendor=%s, product=%s)", hex(vendor), hex(product))`
+
+### Environment Variables
+- All configuration should be read from environment variables via `os.getenv()`
+- Provide sensible defaults where appropriate
+- Use helper functions for required env vars: `_required_env(name: str) -> str`
+- Document all env vars in `env.example`
+- Never hardcode sensitive values (API keys, tokens, phone numbers)
+
+### Printer Abstraction
+- Always use `kidfax.printer.get_printer()` to get printer instances
+- Support `allow_dummy=True` for testing without hardware
+- Handle printer initialization failures gracefully
+- Use the `DummyPrinter` class for development/testing
+- Printer types: 'usb', 'serial', 'bluetooth', 'network', 'dummy'
+
+### API Design
+- Use Flask for all API endpoints
+- Return JSON responses: `jsonify({'success': bool, 'error': str})`
+- Use appropriate HTTP status codes: 200 (success), 400 (bad request), 500 (server error)
+- Enable CORS in `backend/api.py` for cross-origin requests
+- Health check endpoint should verify printer connectivity
+
+### File Paths
+- Use `pathlib.Path` for file operations: `Path.home() / ".kidfax_state.json"`
+- Support configurable paths via environment variables
+- Handle missing files gracefully (return defaults, create if needed)
+
+### State Management
+- Use JSON files for persistent state (e.g., processed Twilio message SIDs)
+- Implement state limits to prevent unbounded growth
+- Save state atomically (write to temp file, then rename)
+- Load state with error handling (fallback to empty state on error)
+
+### SMS/Twilio Patterns
+- Always check `ALLOWLIST` before processing messages
+- Use contact mapping from `CONTACTS` env var for friendly names
+- Track processed messages by Twilio SID to avoid duplicates
+- Handle rate limits and API errors gracefully
+- Support both contact names and raw phone numbers in CLI tools
+
+### Text Processing
+- Sanitize text for printer encoding: `value.encode(ENCODING, "ignore").decode(ENCODING)`
+- Wrap long text to printer line width using `textwrap.wrap()`
+- Default encoding: `cp437` (common for ESC/POS printers)
+- Default line width: 32 characters (58mm thermal printer)
+
+## Module-Specific Guidelines
+
+### `kidfax/printer.py`
+- Export: `get_printer()`, `print_ticket()`, `DummyPrinter`
+- Support all printer types: USB, Serial, Network, Bluetooth
+- Coerce hex strings to integers: `int(value, 0)` for hex support
+- Log printer connection attempts with vendor/product IDs
+- Return `None` on failure (unless `allow_dummy=True`)
+
+### `kidfax/sms_poller.py`
+- Main entry point: `poll_loop()` function
+- Run as infinite loop with configurable sleep interval
+- Re-initialize printer on errors (set `printer = None`)
+- Update e-ink display only when new messages are printed
+- Handle KeyboardInterrupt gracefully (save state, exit cleanly)
+
+### `kidfax/send_sms.py`
+- CLI tool with `main()` function returning exit code
+- Accept contact names or raw phone numbers
+- Print success message with message SID
+- Return non-zero exit code on errors
+
+### Flask Applications (`app.py`, `backend/api.py`)
+- Use Flask's built-in development server for local testing
+- Set `host='0.0.0.0'` to accept connections from network
+- Use environment-based debug mode: `os.getenv('DEBUG', 'True').lower() == 'true'`
+- Keep routes simple, delegate business logic to `kidfax` module
+- Validate input: check for empty strings, required fields
+
+## Testing Considerations
+- Use `DummyPrinter` for unit tests (set `ALLOW_DUMMY_PRINTER=true`)
+- Mock Twilio Client for SMS functionality tests
+- Test error paths: missing env vars, printer failures, network errors
+- Test state file operations: missing file, corrupted JSON, permission errors
+
+## Deployment Patterns
+- Use systemd service files for long-running processes (`sms_poller`, `app.py`)
+- Set `EnvironmentFile` in systemd for environment variables
+- Use `Restart=on-failure` or `Restart=always` for services
+- Log to journald: `sudo journalctl -u service-name -f`
+- Support both standalone (app.py) and separated (backend/api.py) deployments
+
+## Security Best Practices
+- Never commit `.env` files or real credentials
+- Use allowlists for SMS filtering (kid safety)
+- Validate and sanitize all user input
+- Use reCAPTCHA for web form submissions
+- Keep Twilio credentials secure (environment variables only)
+
+## Code Examples
+
+### Getting a Printer
+```python
+from kidfax.printer import get_printer
+
+printer = get_printer(allow_dummy=True)
+if printer is None:
+    logger.error("Printer not available")
+    return
+```
+
+### Environment Variable with Default
+```python
+POLL_SECONDS = int(os.getenv("POLL_SECONDS", "15"))
+```
+
+### Required Environment Variable
+```python
+def _required_env(name: str) -> str:
+    value = os.getenv(name)
+    if not value:
+        raise RuntimeError(f"Environment variable {name} is required")
+    return value
+```
+
+### API Error Response
+```python
+try:
+    # operation
+    return jsonify({'success': True, 'message': 'Success'})
+except Exception as e:
+    logger.error(f"Error: {e}")
+    return jsonify({'success': False, 'error': str(e)}), 500
+```
+
+### State File Management
+```python
+from pathlib import Path
+import json
+
+STATE_FILE = Path(os.getenv("KIDFAX_STATE_FILE", "~/.kidfax_state.json"))
+
+def _load_state() -> tuple[List[str], Set[str]]:
+    if not STATE_FILE.exists():
+        return [], set()
+    try:
+        data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        return data.get("seen_sids", []), set(data.get("seen_sids", []))
+    except Exception as exc:
+        logger.warning("Could not read state file (%s), starting fresh", exc)
+        return [], set()
+```
+
+## Common Patterns to Follow
+1. **Graceful degradation**: Always provide fallbacks (dummy printer, empty state, default values)
+2. **Logging**: Log important operations, errors, and state changes
+3. **Type hints**: Use them for function signatures and complex variables
+4. **Error handling**: Catch specific exceptions, log them, return user-friendly messages
+5. **Configuration**: Everything configurable via environment variables
+6. **Modularity**: Keep business logic in `kidfax/` module, Flask apps are thin wrappers
+
+## Things to Avoid
+- Don't hardcode printer vendor/product IDs (use env vars)
+- Don't commit secrets or credentials
+- Don't crash on hardware failures (log and continue/retry)
+- Don't use print() for logging (use logger)
+- Don't assume printer is always available (check for None)
+- Don't process SMS messages without allowlist check
+- Don't create unbounded state files (implement limits)
+
