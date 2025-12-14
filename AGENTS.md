@@ -1,34 +1,79 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- Core Flask app lives in `app.py` with templates in `templates/` and static single-page frontend assets in `frontend/`.
-- `'backend/'` hosts the API-only deployment (Flask + CORS) plus its own requirements file.
-- `kidfax/` contains shared helpers (printer abstraction) and the Twilio-driven `sms_poller` + `send_sms` tools; run them as Python modules.
-- Documentation for deployment and hardware integration is under the assorted `README_*.md` and setup guides (Netlify, Convex, Bluetooth printers, etc.).
+- **`kidfax/`** - Core Python module containing:
+  - `printer.py` - Printer abstraction for USB, Serial, Network, Bluetooth
+  - `sms_poller.py` - Twilio SMS polling service (main application)
+  - `send_sms.py` - CLI tool for sending SMS replies
+- **`.env.example`** - Configuration template for Twilio, printer, and Kid Fax settings
+- **`requirements.txt`** - Python dependencies (python-escpos, twilio, pyusb, Pillow)
+- **Documentation** - README, QUICK_START, SYSTEMD_SETUP, TWILIO_SETUP, DEPLOYMENT guides
+- **`archive/`** - Archived web interface code (not part of current project)
 
 ## Build, Test, and Development Commands
-- `pip install -r requirements.txt` – install app + Kid Fax dependencies inside your venv on the Pi.
-- `pip install -r backend/requirements.txt` – minimal deps if only deploying the backend API.
-- `python app.py` – serve the combined UI/API on a Pi or dev machine.
-- `python backend/api.py` – run the API-only service (pair with the Netlify frontend).
-- `python -m kidfax.sms_poller` – start the Twilio polling loop that prints SMS messages.
-- `python -m kidfax.send_sms grandma "Hi"` – send a reply via the configured Twilio number.
+- `pip install -r requirements.txt` – Install Kid Fax dependencies
+- `python -m kidfax.sms_poller` – Start SMS polling service (main application)
+- `python -m kidfax.send_sms grandma "Hi"` – Send SMS reply via contact name
+- `python -m kidfax.send_sms +15551234567 "Hi"` – Send SMS reply via phone number
+- `ALLOW_DUMMY_PRINTER=true python -m kidfax.sms_poller` – Test without hardware
+- `sudo systemctl status kidfax` – Check service status (if running as systemd service)
+- `sudo journalctl -u kidfax -f` – View service logs
 
 ## Coding Style & Naming Conventions
-- Follow PEP 8 with 4-space indentation; keep modules short and compose helpers inside `kidfax/` for shared logic.
-- Environment variables are SCREAMING_SNAKE_CASE (see `.env.example`); paths are lowercase with hyphens or underscores.
-- When adding printers or transports, extend `kidfax/printer.py` rather than duplicating configuration code.
+- Follow PEP 8 with 4-space indentation
+- Use type hints for function parameters and return types
+- Environment variables are SCREAMING_SNAKE_CASE (see `.env.example`)
+- Module functions prefixed with underscore for internal use (`_load_state`, `_sanitize`)
+- Hardware interactions always wrapped in try/except blocks
+- Use `logging.getLogger(__name__)` for module-level loggers
 
 ## Testing Guidelines
-- No automated suite exists yet; when contributing Python code, add `pytest` tests under `tests/` (create it if needed) named `test_*.py` and ensure they can run offline with `pytest`.
-- For hardware-dependent features, provide a dummy backend path (`ALLOW_DUMMY_PRINTER=true`) so tests can simulate output without a printer.
+- Test with dummy printer mode: `ALLOW_DUMMY_PRINTER=true`
+- Hardware tests require actual printer connected
+- Integration tests need Twilio test credentials
+- State management tests use temporary state files
+- Manual testing workflow:
+  1. Start poller with dummy printer
+  2. Send test SMS to Twilio number
+  3. Verify console output (dummy printer mode)
+  4. Test reply: `python -m kidfax.send_sms +1... "test"`
 
 ## Commit & Pull Request Guidelines
-- Prefer conventional, descriptive commit subjects (e.g., `feat: add Twilio poller service` or `fix: guard printer init on Pi`).
-- Each PR should describe the feature/fix, list manual testing steps (commands run, hardware used), link any related issues, and include screenshots or logs when UI or print output changes.
-- Keep changes scoped; split large efforts into smaller PRs touching one logical area (frontend, backend, or kidfax tooling).
+- Use conventional commits: `feat:`, `fix:`, `docs:`, `refactor:`
+- Examples:
+  - `feat: add MMS image printing support`
+  - `fix: handle printer disconnection gracefully`
+  - `docs: improve Twilio setup guide`
+- Each PR should describe:
+  - Feature/fix summary
+  - Manual testing steps (commands run, hardware used)
+  - Link to related issues
+  - Hardware tested on (printer model, Pi model)
+- Test on actual hardware when possible
+- Include SMS flow diagrams for feature changes
+- Document new environment variables in `.env.example`
 
 ## Security & Configuration Tips
-- Never commit `.env` or real Twilio credentials; rely on `.env.example` for placeholders.
-- When sharing logs, scrub phone numbers and auth tokens.
-- Use allowlists (`ALLOWLIST`, `CONTACTS`) and rate limits when extending Kid Fax to keep the kid-friendly environment safe.
+- **Never commit `.env`** with real credentials
+- Use Twilio test credentials for development
+- Keep ALLOWLIST restrictive (kid safety)
+- Scrub phone numbers from logs before sharing
+- All configuration via environment variables
+- Use allowlists (`ALLOWLIST`, `CONTACTS`) for kid safety
+- SMS messages not logged to files (privacy)
+
+## Kid Fax Specific Guidelines
+- **Philosophy**: SMS → Print → Reply. No web, no databases, local-only.
+- **Safety first**: Allowlist filtering is critical for kid safety
+- **Graceful degradation**: Always provide fallbacks (dummy printer, empty state, defaults)
+- **Never crash**: Hardware failures should log and continue, not crash the poller
+- **State tracking**: Prevent duplicate prints via JSON state file
+- **Contact mapping**: Support both names and raw phone numbers
+
+## Hardware Integration Notes
+- When extending printer support, update `kidfax/printer.py`
+- Add printer type to `get_printer()` function
+- Update `.env.example` with new configuration variables
+- Document in README.md and DEPLOYMENT.md
+- Test with actual hardware if possible
+- Provide dummy mode fallback for testing
