@@ -211,6 +211,100 @@ Question/Comment
 ================================
 ```
 
+## Kid Fax SMS Mailbox (Pi 400 + Twilio)
+
+The repo now includes a "Kid Fax" workflow so a Raspberry Pi 400 with a thermal printer (and optional 2.9" Waveshare e-ink HAT) can act as a tiny mailbox. Family members text a Twilio number, the Pi polls for new messages, prints them, and (optionally) updates the e-ink screen with a badge. Your kid can reply from the Pi keyboard using the same number.
+
+### Hardware wiring recap
+
+- **Printer**: Use any ESC/POS 58 mm printer supported by `python-escpos`. USB models just plug in; the Adafruit Mini TTL printer connects to the Pi UART (TX↔RX, common ground) and needs its own 5–9 V ≥1.5 A supply.
+- **E-ink display (optional)**: Waveshare 2.9" HAT pins (3V3, GND, MOSI=GPIO10, SCLK=GPIO11, CE0=GPIO8, DC=GPIO25, RST=GPIO17, BUSY=GPIO24). Enable SPI via `sudo raspi-config` → Interface Options → SPI → Enable.
+
+### Install software on the Pi
+
+```bash
+sudo apt update
+sudo apt install -y python3-pip python3-venv git libusb-1.0-0-dev
+python3 -m venv ~/kidfax && source ~/kidfax/bin/activate
+pip install -r requirements.txt
+```
+
+Clone the Waveshare samples if you plan to use their drivers so `e-Paper/RaspberryPi_JetsonNano/python/lib/waveshare_epd` is importable.
+
+### Configure environment
+
+Copy `.env.example` to `.env` (or create `~/kidfax/.env`) and set:
+
+```
+TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+TWILIO_AUTH_TOKEN=your_auth_token
+TWILIO_NUMBER=+15551234567
+ALLOWLIST=+15551112222,+15553334444
+CONTACTS=grandma:+15551112222,uncle:+15553334444
+PRINTER_TYPE=serial
+SERIAL_PORT=/dev/serial0
+SERIAL_BAUD=19200
+ALLOW_DUMMY_PRINTER=false
+```
+
+Other helpful variables (all optional):
+
+- `POLL_SECONDS`, `TWILIO_FETCH_LIMIT` – control how often/ how many messages are fetched.
+- `PRINTER_LINE_WIDTH`, `PRINTER_ENCODING` – adapt wrapping and encoding for your printer.
+- `KIDFAX_HEADER`, `KIDFAX_SUBTITLE` – text shown in the receipt header and e-ink badge.
+- `KIDFAX_STATE_FILE`, `KIDFAX_STATE_LIMIT` – where processed Twilio SIDs are stored.
+- `EINK_STATUS_ENABLED`, `EINK_DRIVER_PACKAGE`, `EINK_DRIVER_MODULE` – enable the Waveshare badge update once the drivers are installed.
+
+### Receive and print SMS messages
+
+```
+source ~/kidfax/bin/activate
+source ~/kidfax/.env
+python -m kidfax.sms_poller
+```
+
+What the poller does:
+
+- Calls Twilio every `POLL_SECONDS` for inbound messages addressed to `TWILIO_NUMBER`.
+- Skips anything not in `ALLOWLIST`.
+- Prints a Kid Fax receipt and records the Twilio SID in `~/.kidfax_state.json` to avoid duplicates.
+- Optionally updates the e-ink badge with the number of new notes and the last sender.
+
+To autostart at boot, add a systemd unit (`/etc/systemd/system/kidfax.service`):
+
+```ini
+[Unit]
+Description=Kid Fax SMS poller
+After=network-online.target
+
+[Service]
+User=pi
+EnvironmentFile=/home/pi/kidfax/.env
+WorkingDirectory=/home/pi/kidfax
+ExecStart=/home/pi/kidfax/bin/python -m kidfax.sms_poller
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### Send replies from the Pi keyboard
+
+Use the helper CLI to send SMS through the same Twilio number:
+
+```
+python -m kidfax.send_sms grandma "Hi! I printed your note!"
+```
+
+The first argument is either a contact name from `CONTACTS` or a raw E.164 number.
+
+### Twilio + kid safety checklist
+
+- Use a Twilio number with SMS enabled and register (A2P 10DLC or toll-free verification) if you're texting US carriers.
+- Keep `ALLOWLIST` small so only trusted family members reach the printer.
+- Remember SMS is not end-to-end encrypted; avoid sharing sensitive info.
+- Each segment is billable, so keep an eye on usage and consider raising `POLL_SECONDS` if you want to poll less often.
+
 ## Troubleshooting
 
 ### Printer Not Detected
