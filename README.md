@@ -1,408 +1,355 @@
-# Ticket Printer Application
+# Kid Fax - SMS Mailbox for Raspberry Pi
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
+[![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-Compatible-C51A4A.svg)](https://www.raspberrypi.org/)
 
-A web-based ticket submission system that automatically prints tickets on ESC/POS thermal printers connected to a Raspberry Pi. Users can submit tickets through a simple web interface, which are then automatically printed with timestamps and formatted output.
+A delightful SMS-to-printer mailbox for kids. Family members text a Twilio number, and messages magically print on a thermal receipt printer connected to a Raspberry Pi. Kids can reply using the keyboard!
+
+## What is Kid Fax?
+
+Kid Fax turns a Raspberry Pi into a physical mailbox for text messages:
+
+📱 **Family texts** → 🖨️ **Instant print** → 📧 **Physical message**
+
+- ⌨️ Kids reply from the keyboard
+- 🛡️ Safe: Only approved phone numbers can send messages
+- 🎨 Optional: E-ink display shows unread message count
+- 🏠 No screens, no web interface - just simple, magical communication
 
 Perfect for:
-- Q&A sessions and feedback collection at events
-- Anonymous comment boards
-- Interactive installations
-- Physical message boards
+- Kids too young for smartphones
+- Grandparents who love sending messages
+- Teaching communication without screens
+- Physical keepsakes of family messages
 
-## Things to Buy (Affiliate links)
+## Hardware Requirements
 
--Printer: (https://amzn.to/43Vx9DT)
+### Required
 
--Raspberry Pi Kit: (https://amzn.to/3XoAZli)
+**Raspberry Pi** (any model with GPIO, tested on Pi 400)
+- Buy: [Raspberry Pi Kit](https://amzn.to/3XoAZli)
 
--Receipt Paper: (https://amzn.to/4ag6q8Y)
+**Thermal Printer** (58mm ESC/POS compatible)
+- Buy: [Netum 58mm Printer](https://amzn.to/43Vx9DT)
+- Alternative: Adafruit Mini Thermal Receipt Printer
 
--You’ll also need a monitor that supports HDMI input. Most do, but here’s a cheap one if you need it: (https://amzn.to/4rsK620)
+**Printer Paper**
+- Buy: [58mm Receipt Paper](https://amzn.to/4ag6q8Y)
 
--Plus a keyboard and mouse, I use this Bluetooth set: (https://amzn.to/4akjutW)
+**Twilio Account** (for SMS)
+- Sign up at [twilio.com](https://www.twilio.com)
+- SMS messaging service with pay-as-you-go pricing
 
-## Description
+### Optional
 
-This application provides a complete solution for collecting and printing tickets in physical form. It consists of:
+**E-ink Display** (2.9" Waveshare HAT for message counter)
+- Shows "You have 3 new messages!" badge
 
-- **Web Interface**: A clean, responsive frontend that can be hosted on Netlify or run locally
-- **Backend API**: A Flask-based API running on Raspberry Pi that handles printer communication
-- **Multiple Printer Support**: Works with USB, Serial, Network, and Bluetooth-connected printers
-- **Optional Database Logging**: Integrate with Convex to log all submitted tickets
-- **Spam Protection**: Built-in reCAPTCHA integration
-
-The system is designed to be flexible and easy to deploy. You can run everything on a single Raspberry Pi, or separate the frontend (hosted on Netlify) from the backend (on your Pi) for remote access.
-
-## Features
-
-- 📝 Simple web interface for ticket submission
-- 🖨️ Automatic printing on Netum 58mm thermal printer
-- ⏰ Timestamp and date stamping
-- 💾 Logged submissions (optional Convex database integration)
-- 🌐 Accessible from any device on your network
-- 🔒 Built-in reCAPTCHA spam protection
+**Keyboard & Monitor** for replies
+- Buy: [Bluetooth Keyboard/Mouse](https://amzn.to/4akjutW)
+- Buy: [HDMI Monitor](https://amzn.to/4rsK620)
 
 ## Quick Start
 
-Want to get started quickly? See [QUICK_START.md](QUICK_START.md) for a step-by-step guide to deploy the application.
+### 1. Hardware Assembly (5 minutes)
 
-For detailed setup instructions, continue reading below.
+**USB Printer:**
+1. Connect thermal printer to Raspberry Pi via USB
+2. Power on the printer
 
-## Configuration
+**Serial Printer (Adafruit Mini TTL):**
+1. Connect TX→RX, RX→TX, GND→GND
+2. Connect separate 5-9V power supply to printer
+3. Enable serial: `sudo raspi-config` → Interface Options → Serial Port → Enable
 
-Before starting, you'll need to configure the following:
+**Optional E-ink Display:**
+1. Attach Waveshare 2.9" HAT to GPIO pins
+2. Enable SPI: `sudo raspi-config` → Interface Options → SPI → Enable
 
-### Required Configuration
+### 2. Twilio Account Setup (3 minutes)
 
-1. **reCAPTCHA Site Key** - Replace `YOUR_RECAPTCHA_SITE_KEY` in `frontend/index.html` (line 183)
-   - Get your key from [Google reCAPTCHA Admin](https://www.google.com/recaptcha/admin)
-   - Or set via Netlify environment variable `RECAPTCHA_SITE_KEY`
+1. Create account at [twilio.com](https://www.twilio.com)
+2. Purchase a phone number (SMS-enabled)
+3. Note your Account SID and Auth Token
+4. See [TWILIO_SETUP.md](TWILIO_SETUP.md) for detailed instructions
 
-2. **API URL** - Replace `YOUR_API_URL_HERE` in `frontend/index.html` (line 217)
-   - Set this to your ngrok, Cloudflare tunnel, or direct Raspberry Pi URL
-   - Example: `https://abc123.ngrok.io` or `https://your-tunnel.trycloudflare.com`
-
-### Optional Configuration
-
-3. **Convex Database** (Optional) - Set `CONVEX_DEPLOYMENT` in Netlify environment variables
-   - Only needed if you want to log tickets to a database
-   - If not configured, tickets will still print but won't be logged
-
-See `env.example` for all available environment variables.
-
-## Setup Instructions
-
-### 1. Install Dependencies
-
-On your Raspberry Pi 4B, install the required Python packages:
+### 3. Software Installation (5 minutes)
 
 ```bash
-# Install Python packages
-pip3 install -r requirements.txt
-
-# Install system dependencies for USB printer
+# Install system dependencies
 sudo apt-get update
 sudo apt-get install -y python3-pip python3-dev libusb-1.0-0-dev
 
-# For USB printer access (important!)
-sudo usermod -a -G lp dialout pi
-sudo apt-get install -y printer-driver-all
+# Clone the repository
+git clone https://github.com/yourusername/KID-FAX.git
+cd KID-FAX
+
+# Install Python dependencies
+pip3 install -r requirements.txt
+
+# Configure environment
+cp .env.example .env
+nano .env  # Edit with your Twilio credentials and settings
 ```
 
-### 2. Connect Your Printer
-
-#### For USB Connection:
-1. Plug in your Netum thermal printer via USB
-2. Find the USB vendor and product IDs:
-   ```bash
-   lsusb
-   ```
-   You should see something like: `Bus 001 Device 003: ID 0416:5011`
-3. The first 4 digits (0416) are the vendor ID
-4. The last 4 digits (5011) are the product ID
-5. Update the values in `app.py` if needed
-
-#### For Serial/GPIO Connection:
-If your printer is connected via GPIO serial pins:
-```bash
-sudo raspi-config
-# Navigate to Interface Options > Serial Port > Enable
-```
-
-### 3. Configure the Application
-
-Edit the configuration in `app.py` or set environment variables:
+### 4. Test Message (2 minutes)
 
 ```bash
-# For USB printer (default)
-export PRINTER_TYPE=usb
-export USB_VENDOR=0x0416
-export USB_PRODUCT=0x5011
+# Start the SMS poller
+python -m kidfax.sms_poller
 
-# For serial printer
-export PRINTER_TYPE=serial
-export SERIAL_PORT=/dev/ttyAMA0
-
-# For network printer
-export PRINTER_TYPE=network
-export NETWORK_HOST=192.168.1.100
+# From another device, text your Twilio number
+# Watch it print!
 ```
 
-### 4. Run the Application
+## How It Works
+
+```
+📱 Family Member's Phone
+    ↓
+    Text to Twilio Number
+    ↓
+☁️  Twilio Cloud API
+    ↓
+🔄 Kid Fax SMS Poller (checks every 15 seconds)
+    ↓
+🛡️  Allowlist Check (kid safety)
+    ↓
+🖨️  Thermal Printer
+    ↓
+📄 Physical Receipt
+
+🎨 Optional: E-ink badge updates
+⌨️  Reply: python -m kidfax.send_sms grandma "Hi!"
+```
+
+## Configuration
+
+Copy `.env.example` to `.env` and configure:
+
+### Required Settings
 
 ```bash
-python3 app.py
-```
-
-The application will start on `http://0.0.0.0:5000`
-
-### 5. Access from Other Devices
-
-Find your Raspberry Pi's IP address:
-```bash
-hostname -I
-```
-
-Then access the web interface from any device on your network:
-```
-http://[RASPBERRY_PI_IP]:5000
-```
-
-### 6. Run as a Service (Optional)
-
-To run the application automatically on boot:
-
-```bash
-# Create a systemd service file
-sudo nano /etc/systemd/system/ticket-printer.service
-```
-
-Add the following content:
-
-```ini
-[Unit]
-Description=Ticket Printer Application
-After=network.target
-
-[Service]
-Type=simple
-User=pi
-WorkingDirectory=/home/pi/ticket-printer-app
-ExecStart=/usr/bin/python3 /home/pi/ticket-printer-app/app.py
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Then enable and start the service:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable ticket-printer
-sudo systemctl start ticket-printer
-sudo systemctl status ticket-printer
-```
-
-## Usage
-
-1. Open a web browser and navigate to `http://[YOUR_PI_IP]:5000`
-2. Enter your name (optional)
-3. Enter your question or comment
-4. Click "Print Ticket"
-5. The ticket will automatically print with the specified format
-
-## Ticket Format
-
-The tickets are printed in this format:
-
-```
-================================
-TICKET
---------------------------------
-From: [Name]
-Time: [Current Time]
-Date: [Current Date]
---------------------------------
-Question/Comment
-[Your message]
---------------------------------
-================================
-```
-
-## Kid Fax SMS Mailbox (Pi 400 + Twilio)
-
-The repo now includes a "Kid Fax" workflow so a Raspberry Pi 400 with a thermal printer (and optional 2.9" Waveshare e-ink HAT) can act as a tiny mailbox. Family members text a Twilio number, the Pi polls for new messages, prints them, and (optionally) updates the e-ink screen with a badge. Your kid can reply from the Pi keyboard using the same number.
-
-### Hardware wiring recap
-
-- **Printer**: Use any ESC/POS 58 mm printer supported by `python-escpos`. USB models just plug in; the Adafruit Mini TTL printer connects to the Pi UART (TX↔RX, common ground) and needs its own 5–9 V ≥1.5 A supply.
-- **E-ink display (optional)**: Waveshare 2.9" HAT pins (3V3, GND, MOSI=GPIO10, SCLK=GPIO11, CE0=GPIO8, DC=GPIO25, RST=GPIO17, BUSY=GPIO24). Enable SPI via `sudo raspi-config` → Interface Options → SPI → Enable.
-
-### Install software on the Pi
-
-```bash
-sudo apt update
-sudo apt install -y python3-pip python3-venv git libusb-1.0-0-dev
-python3 -m venv ~/kidfax && source ~/kidfax/bin/activate
-pip install -r requirements.txt
-```
-
-Clone the Waveshare samples if you plan to use their drivers so `e-Paper/RaspberryPi_JetsonNano/python/lib/waveshare_epd` is importable.
-
-### Configure environment
-
-Copy `.env.example` to `.env` (or create `~/kidfax/.env`) and set:
-
-```
+# Twilio credentials
 TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 TWILIO_AUTH_TOKEN=your_auth_token
 TWILIO_NUMBER=+15551234567
+
+# Security: Only these numbers can send messages (kid safety!)
 ALLOWLIST=+15551112222,+15553334444
+
+# Friendly names for contacts
 CONTACTS=grandma:+15551112222,uncle:+15553334444
+
+# Printer type: usb, serial, network, bluetooth
+PRINTER_TYPE=usb
+```
+
+### USB Printer Configuration
+
+```bash
+# Find your printer's vendor and product IDs
+lsusb  # Look for your printer (e.g., ID 0416:5011)
+
+# In .env:
+USB_VENDOR=0x0416
+USB_PRODUCT=0x5011
+```
+
+### Serial Printer Configuration
+
+```bash
+# In .env:
 PRINTER_TYPE=serial
 SERIAL_PORT=/dev/serial0
 SERIAL_BAUD=19200
-ALLOW_DUMMY_PRINTER=false
 ```
 
-Other helpful variables (all optional):
+See `.env.example` for all configuration options.
 
-- `POLL_SECONDS`, `TWILIO_FETCH_LIMIT` – control how often/ how many messages are fetched.
-- `PRINTER_LINE_WIDTH`, `PRINTER_ENCODING` – adapt wrapping and encoding for your printer.
-- `KIDFAX_HEADER`, `KIDFAX_SUBTITLE` – text shown in the receipt header and e-ink badge.
-- `KIDFAX_STATE_FILE`, `KIDFAX_STATE_LIMIT` – where processed Twilio SIDs are stored.
-- `EINK_STATUS_ENABLED`, `EINK_DRIVER_PACKAGE`, `EINK_DRIVER_MODULE` – enable the Waveshare badge update once the drivers are installed.
+## Usage
 
-### Receive and print SMS messages
+### Receiving Messages (Auto-Start)
 
-```
-source ~/kidfax/bin/activate
-source ~/kidfax/.env
-python -m kidfax.sms_poller
+Set up Kid Fax to run automatically on boot:
+
+```bash
+# Create systemd service
+sudo nano /etc/systemd/system/kidfax.service
 ```
 
-What the poller does:
+See [SYSTEMD_SETUP.md](SYSTEMD_SETUP.md) for complete service configuration.
 
-- Calls Twilio every `POLL_SECONDS` for inbound messages addressed to `TWILIO_NUMBER`.
-- Skips anything not in `ALLOWLIST`.
-- Prints a Kid Fax receipt and records the Twilio SID in `~/.kidfax_state.json` to avoid duplicates.
-- Optionally updates the e-ink badge with the number of new notes and the last sender.
-
-To autostart at boot, add a systemd unit (`/etc/systemd/system/kidfax.service`):
-
-```ini
-[Unit]
-Description=Kid Fax SMS poller
-After=network-online.target
-
-[Service]
-User=pi
-EnvironmentFile=/home/pi/kidfax/.env
-WorkingDirectory=/home/pi/kidfax
-ExecStart=/home/pi/kidfax/bin/python -m kidfax.sms_poller
-Restart=on-failure
-
-[Install]
-WantedBy=multi-user.target
+**Start the service:**
+```bash
+sudo systemctl enable kidfax
+sudo systemctl start kidfax
 ```
 
-### Send replies from the Pi keyboard
-
-Use the helper CLI to send SMS through the same Twilio number:
-
-```
-python -m kidfax.send_sms grandma "Hi! I printed your note!"
+**View logs:**
+```bash
+sudo journalctl -u kidfax -f
 ```
 
-The first argument is either a contact name from `CONTACTS` or a raw E.164 number.
+### Sending Replies
 
-### Twilio + kid safety checklist
+Kids can reply to messages from the Pi keyboard:
 
-- Use a Twilio number with SMS enabled and register (A2P 10DLC or toll-free verification) if you're texting US carriers.
-- Keep `ALLOWLIST` small so only trusted family members reach the printer.
-- Remember SMS is not end-to-end encrypted; avoid sharing sensitive info.
-- Each segment is billable, so keep an eye on usage and consider raising `POLL_SECONDS` if you want to poll less often.
+```bash
+# Reply by contact name
+python -m kidfax.send_sms grandma "Thanks for the message!"
+
+# Reply by phone number
+python -m kidfax.send_sms +15551112222 "Hi Grandma!"
+```
+
+## Safety & Privacy
+
+### Kid Safety Features
+
+- **Allowlist**: Only approved phone numbers can send messages
+- **No web exposure**: Everything runs locally on your Pi
+- **No screen time**: Physical receipts instead of screens
+- **Supervised**: Parents control who can communicate
+
+### Privacy Considerations
+
+- **SMS not encrypted**: Avoid sharing sensitive information
+- **Twilio security**: Industry-standard SMS gateway
+- **Local storage**: Message state stored on Pi only
+- **No cloud logging**: Messages aren't stored in databases
+
+### Configuration for Safety
+
+```bash
+# Strict allowlist (recommended)
+ALLOWLIST=+15551112222,+15553334444
+
+# Empty allowlist accepts all (NOT recommended for kids)
+# ALLOWLIST=
+```
 
 ## Troubleshooting
 
-### Printer Not Detected
+### Printer Not Found
 
-If the printer is not detected:
-1. Check USB connection
-2. Verify printer is powered on
-3. Run `lsusb` to see if the device is recognized
-4. Try different USB ports
-5. Check permissions: `sudo chmod 666 /dev/bus/usb/00X/00Y`
-
-### Permission Errors
-
-If you get permission errors:
+**USB Printer:**
 ```bash
+# Check if printer is detected
+lsusb
+
+# Check permissions
 sudo usermod -a -G lp,dialout pi
-sudo chmod 666 /dev/ttyUSB0  # or /dev/ttyAMA0 for GPIO
-# Then log out and log back in
+# Log out and log back in
+
+# Try different USB ports
 ```
 
-### Test Printer Connection
-
-You can test the printer connection:
+**Serial Printer:**
 ```bash
-python3 << EOF
-from escpos.printer import Usb
-p = Usb(0x0416, 0x5011)
-p.text("Test print\n")
-p.cut()
-EOF
+# Check serial port exists
+ls /dev/serial*
+
+# Enable serial interface
+sudo raspi-config
 ```
 
-### View Logs
+### No Messages Printing
 
-If running as a service:
-```bash
-sudo journalctl -u ticket-printer -f
-```
+1. **Check Twilio credentials**: Test with `python -m kidfax.send_sms +1... "test"`
+2. **Check allowlist**: Ensure sender is in `ALLOWLIST`
+3. **Check state file**: May have already processed message - delete `~/.kidfax_state.json` to reset
+4. **Check printer**: `python -c "from kidfax.printer import get_printer; print(get_printer())"`
 
-## API Endpoints
-
-- `GET /` - Web interface
-- `POST /submit_ticket` - Submit a ticket to print
-  - Body: `{"from_name": "John Doe", "question": "Your question here"}`
-- `GET /health` - Health check endpoint
-
-## Requirements
-
-- Python 3.7+
-- Netum 58mm ESC/POS thermal printer (https://amzn.to/43Vx9DT)
-- Raspberry Pi 4B (https://amzn.to/4ooA5jS)
-- 58mm Receipt Paper (https://amzn.to/4ag6q8Y)
-- Flask web framework
-- python-escpos library
-
-## Deployment Options
-
-This application supports multiple deployment configurations:
-
-### Local Only (Raspberry Pi)
-- Run `app.py` directly on the Raspberry Pi
-- Access via local network: `http://[PI_IP]:5000`
-
-### Frontend on Netlify + Backend on Raspberry Pi (Recommended)
-- Frontend: Deploy `frontend/` folder to Netlify
-- Backend: Run `backend/api.py` on Raspberry Pi
-- Expose backend via ngrok or Cloudflare Tunnel
-- See `README_NETLIFY.md` for detailed instructions
-
-## Environment Variables
-
-Copy `env.example` to `.env` and configure:
+### Test Without Printer
 
 ```bash
-cp env.example .env
-# Edit .env with your settings
+# Use dummy printer mode for testing
+export ALLOW_DUMMY_PRINTER=true
+python -m kidfax.sms_poller
 ```
 
-Key variables:
-- `PRINTER_TYPE` - Type of printer connection (usb, serial, network, bluetooth)
-- `USB_VENDOR` / `USB_PRODUCT` - USB printer IDs (find with `lsusb`)
-- `RECAPTCHA_SITE_KEY` - Your Google reCAPTCHA site key
-- `CONVEX_DEPLOYMENT` - Convex database URL (optional)
+See full troubleshooting guide in [DEPLOYMENT.md](DEPLOYMENT.md)
+
+## Project Structure
+
+```
+KID-FAX/
+├── kidfax/                 # Core Kid Fax module
+│   ├── printer.py          # Printer abstraction (USB/Serial/Network/Bluetooth)
+│   ├── sms_poller.py       # Twilio SMS polling service
+│   └── send_sms.py         # CLI tool for sending replies
+├── .env.example            # Configuration template
+├── requirements.txt        # Python dependencies
+├── QUICK_START.md          # 15-minute setup guide
+├── TWILIO_SETUP.md         # Twilio configuration
+├── SYSTEMD_SETUP.md        # Auto-start service setup
+├── DEPLOYMENT.md           # Complete deployment guide
+├── SETUP_BLUETOOTH.md      # Bluetooth printer setup
+└── CONFIGURE_BLUETOOTH_PRINTER.md
+```
+
+## Advanced Topics
+
+### Bluetooth Printer Setup
+See [SETUP_BLUETOOTH.md](SETUP_BLUETOOTH.md) and [CONFIGURE_BLUETOOTH_PRINTER.md](CONFIGURE_BLUETOOTH_PRINTER.md)
+
+### E-ink Display Setup
+Configure optional status display:
+```bash
+EINK_STATUS_ENABLED=true
+EINK_DRIVER_PACKAGE=e-Paper.RaspberryPi_JetsonNano.python.lib.waveshare_epd
+EINK_DRIVER_MODULE=epd2in9d
+```
+
+Requires Waveshare e-Paper library installed.
+
+### Multiple Printer Types
+Kid Fax supports:
+- **USB** - Plug and play (most common)
+- **Serial/TTL** - GPIO pins (Adafruit Mini)
+- **Network** - WiFi/Ethernet printers
+- **Bluetooth** - Wireless printers
+- **Dummy** - Testing without hardware
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for configuration details.
 
 ## Contributing
 
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on how to contribute to this project.
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
-## Code of Conduct
-
-This project adheres to a Code of Conduct that all contributors are expected to follow. Please read [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) before participating.
+**Areas for contribution:**
+- Testing with different printer models
+- E-ink display improvements
+- MMS support (print images)
+- Group messaging features
+- Message scheduling
+- Additional hardware integrations
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for a detailed history of changes and versions.
+See [CHANGELOG.md](CHANGELOG.md) for version history and migration guides.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see [LICENSE](LICENSE) file for details.
 
-Feel free to modify and use as needed!
+## Acknowledgments
+
+- Built on [python-escpos](https://github.com/python-escpos/python-escpos) for printer support
+- SMS powered by [Twilio](https://www.twilio.com)
+- Inspired by the joy of receiving physical mail
+- Created for kids who deserve magical communication experiences
+
+## Support
+
+- 📖 **Documentation**: Start with [QUICK_START.md](QUICK_START.md)
+- 🐛 **Issues**: [GitHub Issues](https://github.com/yourusername/KID-FAX/issues)
+- 💬 **Discussions**: [GitHub Discussions](https://github.com/yourusername/KID-FAX/discussions)
+
+---
+
+**Made with ❤️ for kids and families who love staying connected**
+
+*Note: As of v2.0.0, Kid Fax is focused exclusively on SMS mailbox functionality. The previous web ticket printing interface has been archived in `archive/` directory.*
