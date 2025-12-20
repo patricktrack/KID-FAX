@@ -12,7 +12,7 @@ from typing import Optional
 
 from PIL import Image
 
-__all__ = ["get_avatar_path", "process_avatar", "delete_avatar", "ensure_avatar_dir"]
+__all__ = ["get_avatar_path", "process_avatar", "delete_avatar", "ensure_avatar_dir", "_process_image"]
 
 LOGGER = logging.getLogger(__name__)
 
@@ -77,6 +77,46 @@ def get_avatar_path(contact_name: str) -> Optional[Path]:
     return None
 
 
+def _process_image(source: Image.Image, target_size: int = 96) -> Image.Image:
+    """
+    Process any PIL image for thermal printing (dithering, resizing).
+
+    This is a reusable image processing pipeline used by both avatar uploads
+    and Telegram photo printing. Converts images to 1-bit monochrome with
+    Floyd-Steinberg dithering for optimal thermal printer output.
+
+    Args:
+        source: PIL Image object
+        target_size: Target dimension in pixels (creates square image)
+
+    Returns:
+        Processed 1-bit PNG Image ready for printing
+    """
+    # Step 1: Convert to RGB (remove alpha/transparency)
+    if source.mode not in ("RGB", "L"):
+        img = source.convert("RGB")
+    elif source.mode == "L":
+        # Grayscale images convert to RGB for consistent processing
+        img = source.convert("RGB")
+    else:
+        img = source
+
+    # Step 2: Resize maintaining aspect ratio
+    img.thumbnail((target_size, target_size), Image.Resampling.LANCZOS)
+
+    # Step 3: Center on white canvas
+    canvas = Image.new("RGB", (target_size, target_size), (255, 255, 255))
+    offset_x = (target_size - img.width) // 2
+    offset_y = (target_size - img.height) // 2
+    canvas.paste(img, (offset_x, offset_y))
+
+    # Step 4: Dither to monochrome (thermal printer)
+    # This creates the pixel art aesthetic perfect for thermal printers
+    dithered = canvas.convert("1", dither=Image.Dither.FLOYDSTEINBERG)
+
+    return dithered
+
+
 def process_avatar(uploaded_file, contact_name: str) -> Path:
     """
     Process uploaded image for thermal printer.
@@ -117,27 +157,8 @@ def process_avatar(uploaded_file, contact_name: str) -> Path:
             f"{img.size} {img.mode} → {target_size}x{target_size} 1-bit"
         )
 
-        # Convert to RGB (removes alpha channel if present)
-        if img.mode not in ("RGB", "L"):
-            img = img.convert("RGB")
-        elif img.mode == "L":
-            # Grayscale images convert to RGB for consistent processing
-            img = img.convert("RGB")
-
-        # Resize to target dimensions, preserving aspect ratio
-        img.thumbnail((target_size, target_size), Image.Resampling.LANCZOS)
-
-        # Create square canvas (white background)
-        canvas = Image.new("RGB", (target_size, target_size), (255, 255, 255))
-
-        # Center the image on the canvas
-        offset_x = (target_size - img.width) // 2
-        offset_y = (target_size - img.height) // 2
-        canvas.paste(img, (offset_x, offset_y))
-
-        # Convert to 1-bit monochrome using Floyd-Steinberg dithering
-        # This creates the pixel art aesthetic perfect for thermal printers
-        bw_img = canvas.convert("1", dither=Image.Dither.FLOYDSTEINBERG)
+        # Process using shared pipeline
+        processed = _process_image(img, target_size=target_size)
 
         # Ensure avatar directory exists
         avatar_dir = get_avatar_dir()
@@ -145,7 +166,7 @@ def process_avatar(uploaded_file, contact_name: str) -> Path:
 
         # Save to avatar directory
         avatar_path = avatar_dir / f"{contact_name}.png"
-        bw_img.save(avatar_path, "PNG")
+        processed.save(avatar_path, "PNG")
 
         LOGGER.info(f"Avatar saved: {avatar_path} ({avatar_path.stat().st_size} bytes)")
         return avatar_path

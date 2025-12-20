@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with th
 
 ## Project Overview
 
-Kid Fax is a Raspberry Pi SMS mailbox that prints incoming text messages on thermal printers. Family members text a Twilio number, the Pi polls for messages, prints them, and kids can reply from the keyboard.
+Kid Fax is a Raspberry Pi Telegram bot that prints incoming messages on thermal printers. Family members message the bot, the Pi polls via long polling, prints messages and photos, and kids can reply from the keyboard.
 
-**Core Philosophy**: Pure SMS → Print → Reply. No web interfaces, no databases, no complex deployments. Just text in, paper out, keyboard replies.
+**Core Philosophy**: Pure messaging → Print → Reply. No web interfaces, no databases, no complex deployments. Just Telegram in, paper out, keyboard replies.
 
 ## Essential Commands
 
@@ -15,16 +15,19 @@ Kid Fax is a Raspberry Pi SMS mailbox that prints incoming text messages on ther
 # Install dependencies
 pip3 install -r requirements.txt
 
-# Run SMS poller (main application)
-python -m kidfax.sms_poller
+# Discover chat IDs from family who messaged the bot
+python -m kidfax.discover_chats
+
+# Run Telegram poller (main application)
+python -m kidfax.telegram_poller
 
 # Send reply from keyboard
-python -m kidfax.send_sms grandma "Hi!"
-python -m kidfax.send_sms +15551234567 "Direct number"
+python -m kidfax.send_telegram grandma "Hi!"
+python -m kidfax.send_telegram 123456789 "Direct chat ID"
 
 # Test printer without hardware
 export ALLOW_DUMMY_PRINTER=true
-python -m kidfax.sms_poller
+python -m kidfax.telegram_poller
 ```
 
 ### Testing
@@ -40,8 +43,8 @@ EOF
 # Find USB printer IDs
 lsusb
 
-# Test Twilio credentials
-python -m kidfax.send_sms +15551234567 "Test"
+# Test Telegram bot token
+python -m kidfax.send_telegram 123456789 "Test"
 ```
 
 ### System Service
@@ -60,10 +63,12 @@ sudo systemctl enable kidfax
 ### Module Structure
 ```
 kidfax/
-├── __init__.py       # Package marker
-├── printer.py        # Printer abstraction layer (154 lines)
-├── sms_poller.py     # Main polling service (320 lines)
-└── send_sms.py       # Outbound SMS CLI (65 lines)
+├── __init__.py          # Package marker
+├── printer.py           # Printer abstraction layer
+├── telegram_poller.py   # Main Telegram polling service
+├── send_telegram.py     # Outbound message CLI
+├── discover_chats.py    # Chat ID discovery helper
+└── avatar_manager.py    # Image processing for avatars & photos
 ```
 
 ### Design Principles
@@ -74,21 +79,26 @@ kidfax/
    - Environment-driven configuration
    - DummyPrinter for testing without hardware
 
-2. **Stateful SMS Processing** (`sms_poller.py`)
+2. **Stateful Message Processing** (`telegram_poller.py`)
    - Prevents duplicate prints via JSON state file
-   - Tracks processed Twilio SIDs
+   - Tracks processed Telegram update IDs
    - Bounded growth (KIDFAX_STATE_LIMIT)
    - Crash-resistant (saves state frequently)
 
 3. **Contact Mapping**
-   - `CONTACTS=grandma:+15551112222,uncle:+15553334444`
-   - Send via name: `send_sms grandma "Hi"`
+   - `CONTACTS=grandma:123456789,uncle:987654321`
+   - Send via name: `send_telegram grandma "Hi"`
    - Prints show contact labels
 
 4. **Security by Allowlist**
-   - `ALLOWLIST=+15551112222,+15553334444`
-   - Only approved numbers can print
+   - `ALLOWLIST=123456789,987654321`
+   - Only approved chat IDs can print
    - Kid safety: prevents spam/unwanted messages
+
+5. **Image Processing** (`avatar_manager.py`)
+   - Floyd-Steinberg dithering for thermal printer aesthetic
+   - Reusable `_process_image()` for avatars AND Telegram photos
+   - Creates pixel art effect perfect for thermal printers
 
 ## Key Files
 
@@ -112,55 +122,67 @@ PRINTER_TYPE = os.getenv("PRINTER_TYPE", "usb")
 3. Add env vars to `.env.example`
 4. Document in README
 
-### kidfax/sms_poller.py:320
-**Purpose**: Main SMS polling loop
+### kidfax/telegram_poller.py
+**Purpose**: Main Telegram polling loop
 
 **Architecture**:
 - Infinite `while True` loop (systemd-friendly)
-- Polls Twilio every `POLL_SECONDS`
+- Long polling (30s timeout) - instant message delivery!
 - State tracking in `~/.kidfax_state.json`
 - Graceful KeyboardInterrupt handling
 - Printer re-initialization on errors
+- Photo download and processing
 
 **Message Flow**:
 ```
-Twilio API → Fetch → Filter allowlist → Check state → Print → Save state → Update e-ink
+Telegram API → Long Poll → Filter allowlist → Check state → Download photos → Dither → Print → Save state → Update e-ink
 ```
 
 **State Management**:
 ```python
 {
-  "seen_sids": ["SM123abc...", "SM456def..."]  # Last N Twilio message SIDs
+  "seen_update_ids": [123456, 123457, ...]  # Last N Telegram update IDs
 }
 ```
 
 **Error Handling**:
 - Printer failures → set `printer = None` → retry next loop
-- Twilio errors → log warning → continue polling
+- Telegram errors → log warning → continue polling
 - State file errors → start fresh (never crash)
+- Photo download failures → log warning → print text only
 
-### kidfax/send_sms.py:65
-**Purpose**: CLI for sending SMS replies
+### kidfax/send_telegram.py
+**Purpose**: CLI for sending Telegram messages
 
 **Usage**:
 ```bash
 # Via contact name
-python -m kidfax.send_sms grandma "Message"
+python -m kidfax.send_telegram grandma "Message"
 
-# Via phone number
-python -m kidfax.send_sms +15551234567 "Message"
+# Via chat ID
+python -m kidfax.send_telegram 123456789 "Message"
 ```
 
-**Returns**: Twilio SID of sent message
+**Returns**: Telegram message ID of sent message
+
+### kidfax/discover_chats.py
+**Purpose**: Helper to discover Telegram chat IDs
+
+**Usage**:
+```bash
+# Have family send "hello" to bot first
+python -m kidfax.discover_chats
+# Outputs CONTACTS and ALLOWLIST env vars to copy to .env
+```
 
 ## Configuration via Environment
 
 All settings via environment variables (see `.env.example`):
 
 **Required**:
-- `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_NUMBER`
-- `ALLOWLIST` (recommended for kid safety)
-- `CONTACTS` (optional but convenient)
+- `TELEGRAM_BOT_TOKEN` - From @BotFather
+- `ALLOWLIST` - Comma-separated chat IDs (recommended for kid safety)
+- `CONTACTS` - Contact name to chat ID mapping (optional but convenient)
 
 **Printer** (choose one type):
 - USB: `PRINTER_TYPE=usb`, `USB_VENDOR=0x0416`, `USB_PRODUCT=0x5011`

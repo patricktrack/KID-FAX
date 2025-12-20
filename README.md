@@ -1,27 +1,30 @@
-# Kid Fax - SMS Mailbox for Raspberry Pi
+# Kid Fax - Telegram Mailbox for Raspberry Pi
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
 [![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-Compatible-C51A4A.svg)](https://www.raspberrypi.org/)
 
-A delightful SMS-to-printer mailbox for kids. Family members text a Twilio number, and messages magically print on a thermal receipt printer connected to a Raspberry Pi. Kids can reply using the keyboard!
+A delightful Telegram-to-printer mailbox for kids. Family members message a Telegram bot, and messages (including photos!) magically print on a thermal receipt printer connected to a Raspberry Pi. Kids can reply using the keyboard!
 
 ## What is Kid Fax?
 
-Kid Fax turns a Raspberry Pi into a physical mailbox for text messages:
+Kid Fax turns a Raspberry Pi into a physical mailbox for Telegram messages:
 
-📱 **Family texts** → 🖨️ **Instant print** → 📧 **Physical message**
+💬 **Family messages bot** → 🖨️ **Instant print** → 📧 **Physical message**
 
 - ⌨️ Kids reply from the keyboard
-- 🛡️ Safe: Only approved phone numbers can send messages
-- 🎨 Optional: E-ink display shows unread message count
+- 🛡️ Safe: Only approved chat IDs can send messages
+- 📸 **NEW!** Prints photos as pixel art with Floyd-Steinberg dithering
+- 💰 **FREE!** No per-message costs (unlike SMS)
+- 🎨 Optional: E-ink display shows last message status
 - 🏠 No screens, no web interface - just simple, magical communication
 
 Perfect for:
 - Kids too young for smartphones
-- Grandparents who love sending messages
+- Grandparents who love sending messages and photos
 - Teaching communication without screens
 - Physical keepsakes of family messages
+- International families (no SMS fees!)
 
 ## Hardware Requirements
 
@@ -37,9 +40,9 @@ Perfect for:
 **Printer Paper**
 - Buy: [58mm Receipt Paper](https://amzn.to/4ag6q8Y)
 
-**Twilio Account** (for SMS)
-- Sign up at [twilio.com](https://www.twilio.com)
-- SMS messaging service with pay-as-you-go pricing
+**Telegram Bot** (for messaging)
+- Create a bot via [@BotFather](https://t.me/botfather) on Telegram
+- **FREE** - no fees, unlimited messages!
 
 ### Optional
 
@@ -52,16 +55,17 @@ Perfect for:
 
 ## 🚀 New User? Start Here!
 
-**Complete Setup Guide for Non-Technical Users**: See **[SETUP_GUIDE.md](SETUP_GUIDE.md)**
+**Complete Setup Guide**: See **[docs/TELEGRAM_SETUP.md](docs/TELEGRAM_SETUP.md)**
 
 This guide walks you through everything step-by-step:
-- ✅ Hardware assembly with pictures
+- ✅ Hardware assembly
 - ✅ Software installation (copy/paste commands)
-- ✅ Twilio account setup
+- ✅ Telegram bot creation via @BotFather
+- ✅ Chat ID discovery for your family
 - ✅ Testing your first message
 - ✅ Troubleshooting common issues
 
-**Time**: 30-45 minutes from unboxing to first printed message!
+**Time**: 20-30 minutes from unboxing to first printed message!
 
 ---
 
@@ -82,12 +86,14 @@ This guide walks you through everything step-by-step:
 1. Attach Waveshare 2.9" HAT to GPIO pins
 2. Enable SPI: `sudo raspi-config` → Interface Options → SPI → Enable
 
-### 2. Twilio Account Setup (3 minutes)
+### 2. Telegram Bot Setup (3 minutes)
 
-1. Create account at [twilio.com](https://www.twilio.com)
-2. Purchase a phone number (SMS-enabled)
-3. Note your Account SID and Auth Token
-4. See [TWILIO_SETUP.md](TWILIO_SETUP.md) for detailed instructions
+1. Open Telegram and search for [@BotFather](https://t.me/botfather)
+2. Send `/newbot` and follow prompts
+3. Choose name: "Kid Fax Family Bot"
+4. Choose username: `kidfax_family_bot` (must end in `bot`)
+5. Save the bot token (looks like `123456789:ABCdef...`)
+6. See [docs/TELEGRAM_SETUP.md](docs/TELEGRAM_SETUP.md) for detailed instructions
 
 ### 3. Software Installation (5 minutes)
 
@@ -105,16 +111,23 @@ pip3 install -r requirements.txt
 
 # Configure environment
 cp .env.example .env
-nano .env  # Edit with your Twilio credentials and settings
+nano .env  # Edit with your Telegram bot token
 ```
 
-### 4. Test Message (2 minutes)
+### 4. Discover Chat IDs & Test (3 minutes)
 
 ```bash
-# Start the SMS poller
-python -m kidfax.sms_poller
+# Have family members send "hello" to your bot
+# Then discover their chat IDs:
+python -m kidfax.discover_chats
 
-# From another device, text your Twilio number
+# Copy the output to your .env file
+# Add the CONTACTS and ALLOWLIST lines
+
+# Start the Telegram poller
+python -m kidfax.telegram_poller
+
+# Send a message to your bot
 # Watch it print!
 ```
 
@@ -124,25 +137,27 @@ python -m kidfax.sms_poller
 ```
 📱 Family Member's Phone
     ↓
-    Text to Twilio Number
+    Message to Telegram Bot
     ↓
-☁️  Twilio Cloud API
+☁️  Telegram Bot API
     ↓
-🔄 Kid Fax SMS Poller (checks every 15 seconds)
+🔄 Kid Fax Telegram Poller (long polling, 30s timeout - instant!)
     ↓
-🛡️  Allowlist Check (kid safety)
+🛡️  Allowlist Check (kid safety - only approved chat IDs)
+    ↓
+📸 Photo Download & Dithering (optional, pixel art!)
     ↓
 🖨️  Thermal Printer
     ↓
-📄 Physical Receipt
+📄 Physical Receipt with Text + Photo
 
-🎨 Optional: E-ink badge updates
+🎨 Optional: E-ink display updates
 ```
 
 **Sending Replies:**
 ```
 ⌨️  Option 1: CLI
-    python -m kidfax.send_sms grandma "Hi!"
+    python -m kidfax.send_telegram grandma "Hi!"
 
 🎹 Option 2: Interactive Keyboard Mode
     Press F1 (Grandma) → Type message → Press Enter → Send!
