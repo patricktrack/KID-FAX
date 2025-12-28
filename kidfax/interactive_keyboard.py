@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Interactive keyboard messaging for Kid Fax."""
+"""Interactive keyboard messaging for Kid Fax via Telegram."""
 from __future__ import annotations
 
 import logging
@@ -9,7 +9,6 @@ import time
 from typing import Optional
 
 from pynput import keyboard
-from twilio.rest import Client
 
 from kidfax.eink_display import (
     init_display,
@@ -22,11 +21,12 @@ from kidfax.keyboard_input import (
     load_contacts,
     is_function_key,
 )
+from kidfax.send_telegram import send_message
 
 LOG = logging.getLogger("kidfax.interactive")
 
 # Configuration
-SMS_CHAR_LIMIT = int(os.getenv("SMS_CHAR_LIMIT", "160"))
+CHAR_LIMIT = int(os.getenv("TELEGRAM_CHAR_LIMIT", "4096"))
 PRINT_RECEIPTS = os.getenv("PRINT_SEND_RECEIPTS", "false").lower() in {"1", "true", "yes"}
 
 
@@ -38,38 +38,24 @@ def _required_env(name: str) -> str:
     return value
 
 
-def send_sms(recipient_name: str, recipient_number: str, message_text: str) -> bool:
+def send_telegram(recipient_name: str, chat_id: str, message_text: str) -> bool:
     """
-    Send SMS message using Twilio API.
+    Send Telegram message using Bot API.
 
     Args:
         recipient_name: Contact name (for logging)
-        recipient_number: Phone number in E.164 format
+        chat_id: Telegram chat ID
         message_text: Message body
 
     Returns:
         True if sent successfully, False otherwise
     """
     try:
-        account_sid = _required_env("TWILIO_ACCOUNT_SID")
-        auth_token = _required_env("TWILIO_AUTH_TOKEN")
-        from_number = _required_env("TWILIO_NUMBER")
-
-        client = Client(account_sid, auth_token)
-        message = client.messages.create(
-            to=recipient_number,
-            from_=from_number,
-            body=message_text
-        )
-
-        LOG.info(
-            "Message sent to %s (%s): SID %s",
-            recipient_name,
-            recipient_number,
-            message.sid
-        )
-        return True
-
+        bot_token = _required_env("TELEGRAM_BOT_TOKEN")
+        success = send_message(bot_token, int(chat_id), message_text)
+        if success:
+            LOG.info("Message sent to %s (chat %s)", recipient_name, chat_id)
+        return success
     except Exception as exc:
         LOG.error("Failed to send message to %s: %s", recipient_name, exc)
         return False
@@ -125,7 +111,7 @@ def print_send_receipt(recipient_name: str, message_text: str) -> None:
         printer.text("\n")
         printer.text("-" * line_width + "\n")
         printer.set(align='center', font='a', width=1, height=1, bold=False)
-        printer.text("✓ Delivered via SMS\n")
+        printer.text("✓ Delivered via Telegram\n")
         printer.text("\n")
 
         # Cut
@@ -149,19 +135,17 @@ def interactive_loop() -> None:
     2. Wait for F1-F12 press to select recipient
     3. Show recipient and typed message on e-ink
     4. Wait for Enter to send or ESC to cancel
-    5. Send message via Twilio
+    5. Send message via Telegram
     6. Show confirmation and optional receipt
     7. Return to contact list
     """
-    # Validate Twilio credentials early
+    # Validate Telegram token early
     try:
-        _required_env("TWILIO_ACCOUNT_SID")
-        _required_env("TWILIO_AUTH_TOKEN")
-        _required_env("TWILIO_NUMBER")
+        _required_env("TELEGRAM_BOT_TOKEN")
     except RuntimeError as exc:
-        LOG.error("Twilio configuration error: %s", exc)
+        LOG.error("Telegram configuration error: %s", exc)
         print(f"Error: {exc}")
-        print("Please configure Twilio credentials in .env file")
+        print("Please configure TELEGRAM_BOT_TOKEN in .env file")
         sys.exit(1)
 
     # Load contacts
@@ -180,7 +164,7 @@ def interactive_loop() -> None:
         LOG.warning("E-ink display not available (continuing without display)")
 
     # Initialize message composer
-    composer = MessageComposer(contacts, char_limit=SMS_CHAR_LIMIT)
+    composer = MessageComposer(contacts, char_limit=CHAR_LIMIT)
 
     # Show initial contact list
     render_contact_list(epd, composer.fkey_map)
@@ -201,12 +185,12 @@ def interactive_loop() -> None:
             if fkey_name:
                 if composer.select_recipient_by_fkey(fkey_name):
                     print(f"\n→ Selected: {composer.selected_recipient}")
-                    print(f"Type your message (max {SMS_CHAR_LIMIT} chars), then press Enter to send:")
+                    print(f"Type your message (max {CHAR_LIMIT} chars), then press Enter to send:")
                     render_keyboard_mode(
                         epd,
                         composer.selected_recipient,
                         composer.get_message(),
-                        SMS_CHAR_LIMIT
+                        CHAR_LIMIT
                     )
                 else:
                     print(f"\n✗ No contact mapped to {fkey_name}")
@@ -222,7 +206,7 @@ def interactive_loop() -> None:
                     return
 
                 recipient_name = composer.selected_recipient
-                recipient_number = composer.selected_number
+                chat_id = composer.selected_number
                 message_text = composer.get_message()
 
                 print(f"\n→ Sending to {recipient_name}...")
@@ -230,8 +214,8 @@ def interactive_loop() -> None:
                 # Show "Sending..." on e-ink
                 render_send_confirmation(epd, recipient_name, "Sending...")
 
-                # Send via Twilio
-                success = send_sms(recipient_name, recipient_number, message_text)
+                # Send via Telegram
+                success = send_telegram(recipient_name, chat_id, message_text)
 
                 if success:
                     print(f"✓ Message sent to {recipient_name}!")
@@ -267,16 +251,19 @@ def interactive_loop() -> None:
             if key == keyboard.Key.backspace:
                 if composer.selected_recipient:
                     if composer.delete_character():
-                        # Update display
-                        render_keyboard_mode(
-                            epd,
-                            composer.selected_recipient,
-                            composer.get_message(),
-                            SMS_CHAR_LIMIT
-                        )
-                        # Visual feedback
+                        # Visual feedback in terminal only (e-ink too slow)
                         sys.stdout.write('\b \b')
                         sys.stdout.flush()
+                return
+
+            # Space key: Add space to message
+            if key == keyboard.Key.space:
+                if not composer.selected_recipient:
+                    print("\n✗ Select a recipient first (press F1-F12)")
+                    return
+                if composer.add_character(' '):
+                    sys.stdout.write(' ')
+                    sys.stdout.flush()
                 return
 
             # Regular character: Add to message
@@ -286,19 +273,12 @@ def interactive_loop() -> None:
                     return
 
                 if composer.add_character(key.char):
-                    # Update display
-                    render_keyboard_mode(
-                        epd,
-                        composer.selected_recipient,
-                        composer.get_message(),
-                        SMS_CHAR_LIMIT
-                    )
-                    # Echo character to console
+                    # Echo character to terminal only (e-ink too slow for per-char updates)
                     sys.stdout.write(key.char)
                     sys.stdout.flush()
                 else:
                     # Character limit reached
-                    print(f"\n✗ Character limit reached ({SMS_CHAR_LIMIT})")
+                    print(f"\n✗ Character limit reached ({CHAR_LIMIT})")
 
         except Exception as exc:
             LOG.error("Error handling key press: %s", exc)
