@@ -298,7 +298,7 @@ def interactive_loop() -> None:
                         sys.stdout.flush()
                 return
 
-            # Space key: Add space to message and update e-ink (after each word)
+            # Space key: Add space to message, update e-ink every 3rd word
             if key == keyboard.Key.space:
                 if not composer.selected_recipient:
                     print("\n✗ Select a recipient first (press F1-F12)")
@@ -306,13 +306,16 @@ def interactive_loop() -> None:
                 if composer.add_character(' '):
                     sys.stdout.write(' ')
                     sys.stdout.flush()
-                    # Update e-ink after each word
-                    render_keyboard_mode(
-                        epd,
-                        composer.selected_recipient,
-                        composer.get_message(),
-                        Telegram_CHAR_LIMIT
-                    )
+                    # Count spaces (words) in message
+                    word_count = composer.get_message().count(' ')
+                    # Update e-ink every 3 words
+                    if word_count % 3 == 0:
+                        render_keyboard_mode(
+                            epd,
+                            composer.selected_recipient,
+                            composer.get_message(),
+                            Telegram_CHAR_LIMIT
+                        )
                 return
 
             # Regular character: Add to message
