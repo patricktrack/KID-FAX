@@ -957,17 +957,20 @@
                     headers: {'Content-Type': 'application/json'}
                 });
                 const data = await response.json();
-                if (data.success && data.chats && data.chats.length > 0) {
-                    let html = '<table style="width:100%;"><tr><th>Name</th><th>ID</th><th></th></tr>';
-                    data.chats.forEach(chat => {
-                        const name = chat.first_name + (chat.last_name ? ' ' + chat.last_name : '');
-                        html += '<tr><td>' + name + '</td><td>' + chat.chat_id + '</td>';
-                        html += '<td><button class="btn-primary" onclick="addDiscovered(\'' + name.toLowerCase().replace(/ /g,'_') + '\',\'' + chat.chat_id + '\')">Add</button></td></tr>';
+                if (data.success && data.chats && Object.keys(data.chats).length > 0) {
+                    let html = '<table style="width:100%;"><tr><th>Name</th><th>Chat ID</th><th>Status</th><th></th></tr>';
+                    Object.entries(data.chats).forEach(([chatId, chat]) => {
+                        const name = (chat.first_name || '') + (chat.last_name ? ' ' + chat.last_name : '');
+                        const status = chat.already_added ? '<span style="color:green;">✓ Added</span>' : '<span style="color:orange;">New</span>';
+                        const btn = chat.already_added ? '' : '<button class="btn-primary" onclick="addDiscovered(\'' + name.trim().toLowerCase().replace(/ /g,'_') + '\',\'' + chatId + '\')">Add</button>';
+                        html += '<tr><td>' + name + '</td><td>' + chatId + '</td><td>' + status + '</td><td>' + btn + '</td></tr>';
                     });
                     html += '</table>';
                     container.innerHTML = html;
+                } else if (data.success) {
+                    container.innerHTML = '<p>No chats found. Have family members message your bot first!</p>';
                 } else {
-                    container.innerHTML = '<p>No new chats found</p>';
+                    container.innerHTML = '<p style="color:red;">Error: ' + (data.error || 'Unknown error') + '</p>';
                 }
             } catch (error) {
                 container.innerHTML = '<p style="color:red;">Error: ' + error + '</p>';
