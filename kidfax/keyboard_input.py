@@ -84,10 +84,23 @@ def map_fkeys_to_contacts(contacts: Dict[str, str]) -> Dict[str, str]:
 
     Note:
         Maximum 12 contacts supported (F1-F12).
-        If more than 12 contacts provided, only first 12 are mapped.
+        Uses CONTACTS_ORDER env var if set, otherwise preserves CONTACTS order.
     """
     fkey_map: Dict[str, str] = {}
-    contact_names = sorted(contacts.keys())[:12]  # Max 12 for F1-F12
+
+    # Check for custom order
+    order_str = os.getenv("CONTACTS_ORDER", "")
+    if order_str:
+        # Use custom order, filter to only existing contacts
+        ordered_names = [n.strip() for n in order_str.split(',') if n.strip() in contacts]
+        # Add any contacts not in the order list at the end
+        for name in contacts.keys():
+            if name not in ordered_names:
+                ordered_names.append(name)
+        contact_names = ordered_names[:12]
+    else:
+        # Preserve order from CONTACTS string (dict maintains insertion order in Python 3.7+)
+        contact_names = list(contacts.keys())[:12]
 
     for i, contact_name in enumerate(contact_names, start=1):
         fkey = f"F{i}"
