@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 from kidfax.avatar_manager import ensure_avatar_dir, get_avatar_path, _process_image
 from kidfax.eink_display import init_display, render_polling_status
@@ -26,6 +26,45 @@ ENCODING = os.getenv("PRINTER_ENCODING", "cp437")
 LINE_WIDTH = int(os.getenv("PRINTER_LINE_WIDTH", "32"))
 ALLOW_DUMMY = os.getenv("ALLOW_DUMMY_PRINTER", "false").lower() in {"1", "true", "yes"}
 
+
+
+# Conversation tracking - show kid's message if family responds within 10 min
+SENT_MESSAGES_FILE = Path.home() / ".kidfax_sent_messages.json"
+CONVERSATION_WINDOW_MINUTES = 10
+
+def _get_recent_sent_message(chat_id: int) -> Optional[tuple]:
+    """Get sent message to this chat_id if within conversation window.
+    
+    Returns:
+        Tuple of (message_text, timestamp_str) or None
+    """
+    try:
+        if not SENT_MESSAGES_FILE.exists():
+            return None
+        
+        with open(SENT_MESSAGES_FILE, 'r') as f:
+            data = json.load(f)
+        
+        chat_data = data.get(str(chat_id))
+        if not chat_data:
+            return None
+        
+        sent_time = dt.datetime.fromisoformat(chat_data['timestamp'])
+        now = dt.datetime.now()
+        diff = (now - sent_time).total_seconds() / 60
+        
+        if diff <= CONVERSATION_WINDOW_MINUTES:
+            # Clear this entry so it doesn't print again
+            del data[str(chat_id)]
+            with open(SENT_MESSAGES_FILE, 'w') as f:
+                json.dump(data, f)
+            
+            return (chat_data['message'], sent_time.strftime("%m/%d/%y %I:%M %p"))
+        
+        return None
+    except Exception as exc:
+        LOG.debug(f"Error getting sent message: {exc}")
+        return None
 
 def _required_env(name: str) -> str:
     """Get required environment variable."""
@@ -93,6 +132,174 @@ def _wrap_text(value: str) -> List[str]:
 def _sanitize(value: str) -> str:
     """Sanitize text for printer encoding."""
     return value.encode(ENCODING, "ignore").decode(ENCODING)
+
+
+def _create_speech_bubble(text: str, max_width: int = 360) -> Image.Image:
+    """
+    Create a speech bubble image with the message text inside.
+    Bubble width adapts to text length. Left-justified, no tail.
+
+    Args:
+        text: Message text to display
+        max_width: Maximum width in pixels (thermal printer width)
+
+    Returns:
+        PIL Image with speech bubble
+    """
+    # Settings - LARGER text
+    padding = 16
+    corner_radius = 18
+    line_height = 28
+    font_size = 20
+    min_bubble_width = 80  # Minimum width for short messages
+
+    # Try to load a font, fall back to default
+    try:
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", font_size)
+    except (IOError, OSError):
+        try:
+            font = ImageFont.truetype("/usr/share/fonts/TTF/DejaVuSans.ttf", font_size)
+        except (IOError, OSError):
+            font = ImageFont.load_default()
+
+    # Calculate available width for text
+    max_text_width = max_width - (padding * 2) - 10
+
+    # Wrap text to fit
+    chars_per_line = max_text_width // 11  # Approximate chars for larger font
+    wrapped_lines = []
+    for paragraph in text.split('\n'):
+        if paragraph.strip():
+            wrapped_lines.extend(textwrap.wrap(paragraph, width=chars_per_line))
+        else:
+            wrapped_lines.append('')
+
+    if not wrapped_lines:
+        wrapped_lines = ['']
+
+    # Measure actual text width for responsive bubble
+    max_line_width = 0
+    for line in wrapped_lines:
+        try:
+            bbox = font.getbbox(line)
+            line_width = bbox[2] - bbox[0]
+        except AttributeError:
+            # Fallback for older PIL
+            line_width = len(line) * 11
+        max_line_width = max(max_line_width, line_width)
+
+    # Calculate responsive bubble width
+    content_width = max_line_width + (padding * 2)
+    bubble_width = max(min_bubble_width, min(content_width, max_width - 4))
+
+    # Calculate bubble dimensions
+    text_height = len(wrapped_lines) * line_height
+    bubble_height = text_height + (padding * 2)
+    total_width = bubble_width + 4
+    total_height = bubble_height + 4
+
+    # Create image (white background)
+    img = Image.new('1', (total_width, total_height), 1)  # 1-bit, white
+    draw = ImageDraw.Draw(img)
+
+    # Bubble position (left-justified, no tail offset)
+    bx = 2
+    by = 2
+    bw = bubble_width
+    bh = bubble_height
+
+    # Draw rounded rectangle outline
+    # Top edge
+    draw.line([(bx + corner_radius, by), (bx + bw - corner_radius, by)], fill=0, width=2)
+    # Bottom edge
+    draw.line([(bx + corner_radius, by + bh), (bx + bw - corner_radius, by + bh)], fill=0, width=2)
+    # Left edge
+    draw.line([(bx, by + corner_radius), (bx, by + bh - corner_radius)], fill=0, width=2)
+    # Right edge
+    draw.line([(bx + bw, by + corner_radius), (bx + bw, by + bh - corner_radius)], fill=0, width=2)
+
+    # Corners (quarter circles as arcs)
+    draw.arc([(bx, by), (bx + corner_radius*2, by + corner_radius*2)], 180, 270, fill=0, width=2)
+    draw.arc([(bx + bw - corner_radius*2, by), (bx + bw, by + corner_radius*2)], 270, 360, fill=0, width=2)
+    draw.arc([(bx, by + bh - corner_radius*2), (bx + corner_radius*2, by + bh)], 90, 180, fill=0, width=2)
+    draw.arc([(bx + bw - corner_radius*2, by + bh - corner_radius*2), (bx + bw, by + bh)], 0, 90, fill=0, width=2)
+
+    # Draw text inside bubble
+    text_x = bx + padding
+    text_y = by + padding
+    for i, line in enumerate(wrapped_lines):
+        draw.text((text_x, text_y + i * line_height), line, font=font, fill=0)
+
+    return img
+
+
+
+def _create_speech_bubble_right(text: str, max_width: int = 360) -> Image.Image:
+    """Create a RIGHT-justified speech bubble for sent messages."""
+    padding = 16
+    corner_radius = 18
+    line_height = 28
+    font_size = 20
+    min_bubble_width = 80
+
+    try:
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", font_size)
+    except (IOError, OSError):
+        font = ImageFont.load_default()
+
+    max_text_width = max_width - (padding * 2) - 10
+    chars_per_line = max_text_width // 11
+    wrapped_lines = []
+    for paragraph in text.split('\n'):
+        if paragraph.strip():
+            wrapped_lines.extend(textwrap.wrap(paragraph, width=chars_per_line))
+        else:
+            wrapped_lines.append('')
+    if not wrapped_lines:
+        wrapped_lines = ['']
+
+    max_line_width = 0
+    for line in wrapped_lines:
+        try:
+            bbox = font.getbbox(line)
+            line_width = bbox[2] - bbox[0]
+        except AttributeError:
+            line_width = len(line) * 11
+        max_line_width = max(max_line_width, line_width)
+
+    content_width = max_line_width + (padding * 2)
+    bubble_width = max(min_bubble_width, min(content_width, max_width - 4))
+    text_height = len(wrapped_lines) * line_height
+    bubble_height = text_height + (padding * 2)
+    total_width = max_width
+    total_height = bubble_height + 4
+
+    img = Image.new('1', (total_width, total_height), 1)
+    draw = ImageDraw.Draw(img)
+
+    # Right-justify: bubble starts from right edge
+    bx = total_width - bubble_width - 2
+    by = 2
+    bw = bubble_width
+    bh = bubble_height
+
+    # Draw rounded rectangle
+    draw.line([(bx + corner_radius, by), (bx + bw - corner_radius, by)], fill=0, width=2)
+    draw.line([(bx + corner_radius, by + bh), (bx + bw - corner_radius, by + bh)], fill=0, width=2)
+    draw.line([(bx, by + corner_radius), (bx, by + bh - corner_radius)], fill=0, width=2)
+    draw.line([(bx + bw, by + corner_radius), (bx + bw, by + bh - corner_radius)], fill=0, width=2)
+
+    draw.arc([(bx, by), (bx + corner_radius*2, by + corner_radius*2)], 180, 270, fill=0, width=2)
+    draw.arc([(bx + bw - corner_radius*2, by), (bx + bw, by + corner_radius*2)], 270, 360, fill=0, width=2)
+    draw.arc([(bx, by + bh - corner_radius*2), (bx + corner_radius*2, by + bh)], 90, 180, fill=0, width=2)
+    draw.arc([(bx + bw - corner_radius*2, by + bh - corner_radius*2), (bx + bw, by + bh)], 0, 90, fill=0, width=2)
+
+    text_x = bx + padding
+    text_y = by + padding
+    for i, line in enumerate(wrapped_lines):
+        draw.text((text_x, text_y + i * line_height), line, font=font, fill=0)
+
+    return img
 
 
 def _load_state() -> tuple[List[int], Set[int]]:
@@ -198,49 +405,73 @@ def _extract_message_data(update: Dict) -> Optional[Dict]:
 
 def _print_telegram_message(printer: object, sender_label: str, text: str, photo: Optional[Image.Image] = None) -> None:
     """Print Telegram message with optional photo."""
-    # 1. Header
-    now = dt.datetime.now().strftime("%Y-%m-%d %H:%M")
-    printer.set(align='center', font='a', width=2, height=2, bold=True)
-    printer.text(f"{HEADER_TEXT}\n")
-
-    printer.set(align='center', font='a', width=1, height=1, bold=False)
-    printer.text(f"{now}\n")
-    printer.text("-" * LINE_WIDTH + "\n")
-
-    # 2. Avatar (existing contact avatar system)
+    # 1. Extract contact info
     avatar_enabled = os.getenv("AVATAR_ENABLED", "true").lower() in {"1", "true", "yes"}
-    if avatar_enabled:
-        # Extract chat_id from sender_label (format: "name (chat_id)")
-        chat_id_str = sender_label.split('(')[-1].rstrip(')')
+    contact_name = None
+    chat_id = None
+
+    chat_id_str = sender_label.split('(')[-1].rstrip(')')
+    try:
+        chat_id = int(chat_id_str)
+        contact_name = _extract_contact_name(chat_id)
+    except ValueError:
+        pass
+
+    display_name = contact_name.title() if contact_name else sender_label.split('(')[0].strip()
+
+    # Check for recent sent message (conversation mode)
+    recent_sent = _get_recent_sent_message(chat_id) if chat_id else None
+
+    if recent_sent:
+        # Print kid's message first (right-justified bubble)
+        sent_text, sent_time = recent_sent
         try:
-            chat_id = int(chat_id_str)
-            contact_name = _extract_contact_name(chat_id)
-            if contact_name:
-                avatar_path = get_avatar_path(contact_name)
-                if avatar_path and avatar_path.exists():
-                    try:
-                        img = Image.open(avatar_path)
-                        printer.set(align='center')
-                        printer.text("\n")
-                        printer.image(img)
-                        printer.text("\n")
-                    except Exception as exc:
-                        LOG.warning(f"Failed to print avatar: {exc}")
-        except ValueError:
-            pass
+            sent_bubble = _create_speech_bubble_right(_sanitize(sent_text))
+            printer.set(align='right')
+            printer.image(sent_bubble)
+            printer.set(align='right', font='a', width=1, height=1, bold=False)
+            printer.text(f"{sent_time}  \n\n")
+        except Exception as exc:
+            LOG.warning(f"Failed to print sent bubble: {exc}")
+            printer.set(align='right', font='a', width=1, height=1, bold=False)
+            printer.text(f"{sent_text}\n")
+            printer.text(f"{sent_time}  \n\n")
 
-    # 3. Sender name
-    printer.set(align='left', font='a', width=1, height=1, bold=True)
-    printer.text(f"From: {sender_label}\n\n")
 
-    # 4. Message text
+    # 2. From name (centered)
+    printer.set(align='center', font='a', width=1, height=1, bold=True)
+    printer.text(f"From: {display_name}\n\n")
+
+    # 3. Avatar
+    if avatar_enabled and contact_name:
+        avatar_path = get_avatar_path(contact_name)
+        if avatar_path and avatar_path.exists():
+            try:
+                img = Image.open(avatar_path)
+                printer.set(align='center')
+                printer.image(img)
+                printer.text("\n")
+            except Exception as exc:
+                LOG.warning(f"Failed to print avatar: {exc}")
+
+    # 4. Message text in speech bubble (left-justified)
     if text:
-        printer.set(align='left', font='a', width=1, height=1, bold=False)
-        for line in _wrap_text(_sanitize(text)):
-            printer.text(line + "\n")
-        printer.text("\n")
+        try:
+            bubble_img = _create_speech_bubble(_sanitize(text))
+            printer.set(align='left')
+            printer.image(bubble_img)
+        except Exception as exc:
+            LOG.warning(f"Speech bubble failed, using plain text: {exc}")
+            printer.set(align='left', font='a', width=1, height=1, bold=False)
+            for line in _wrap_text(_sanitize(text)):
+                printer.text(line + "\n")
 
-    # 5. Photo (if present) - REUSE AVATAR PROCESSING
+    # 5. Timestamp (small, left-aligned, below message)
+    now = dt.datetime.now().strftime("%m/%d/%y %I:%M %p")
+    printer.set(align='left', font='a', width=1, height=1, bold=False)
+    printer.text(f"  {now}\n")
+
+    # 6. Photo (if present)
     if photo:
         try:
             processed = _process_image(
@@ -250,11 +481,10 @@ def _print_telegram_message(printer: object, sender_label: str, text: str, photo
             printer.set(align='center')
             printer.text("\n")
             printer.image(processed)
-            printer.text("\n")
         except Exception as exc:
             LOG.warning(f"Failed to print photo: {exc}")
 
-    # 6. Footer
+    # 7. Footer
     printer.text("\n")
     try:
         printer.cut()

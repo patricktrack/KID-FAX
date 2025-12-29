@@ -94,10 +94,10 @@ def serialize_allowlist(numbers: Set[str]) -> str:
 
 def validate_phone_number(number: str) -> Tuple[bool, str]:
     """
-    Validate phone number in E.164 format.
+    Validate phone number (E.164) or Telegram chat ID.
 
     Args:
-        number: Phone number string
+        number: Phone number or Telegram chat ID string
 
     Returns:
         Tuple of (valid: bool, error_message: str)
@@ -105,19 +105,23 @@ def validate_phone_number(number: str) -> Tuple[bool, str]:
     Example:
         >>> validate_phone_number("+15551234567")
         (True, '')
-        >>> validate_phone_number("555-123-4567")
-        (False, 'Phone number must start with + (E.164 format)')
+        >>> validate_phone_number("123456789")  # Telegram chat ID
+        (True, '')
     """
     if not number:
-        return (False, "Phone number is required")
+        return (False, "Phone number or chat ID is required")
 
-    if not number.startswith('+'):
-        return (False, "Phone number must start with + (E.164 format)")
+    # Accept Telegram chat IDs (numeric strings)
+    if number.isdigit() or (number.startswith('-') and number[1:].isdigit()):
+        return (True, "")
 
-    if not PHONE_REGEX.match(number):
-        return (False, "Invalid phone format. Use E.164: +1234567890 (1-15 digits)")
+    # Also accept E.164 phone numbers
+    if number.startswith('+'):
+        if PHONE_REGEX.match(number):
+            return (True, "")
+        return (False, "Invalid phone format. Use E.164: +1234567890")
 
-    return (True, "")
+    return (False, "Must be a Telegram chat ID (numbers) or phone (+1234567890)")
 
 
 def validate_contact_name(name: str) -> Tuple[bool, str]:

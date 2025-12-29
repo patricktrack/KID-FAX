@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Interactive keyboard messaging for Kid Fax via Telegram."""
+"""Interactive keyboard messaging for Kid Fax."""
 from __future__ import annotations
 
+import json
 import logging
 import os
 import sys
@@ -9,6 +10,7 @@ import time
 from typing import Optional
 
 from pynput import keyboard
+import requests
 
 from kidfax.eink_display import (
     init_display,
@@ -21,12 +23,52 @@ from kidfax.keyboard_input import (
     load_contacts,
     is_function_key,
 )
-from kidfax.send_telegram import send_message
 
 LOG = logging.getLogger("kidfax.interactive")
+# Sent message tracking for conversation mode
+SENT_MESSAGES_FILE = os.path.expanduser("~/.kidfax_sent_messages.json")
+LAST_RECIPIENT_FILE = os.path.expanduser("~/.kidfax_last_recipient.json")
+
+def _save_last_recipient(name: str, chat_id: str) -> None:
+    """Save the last messaged recipient."""
+    try:
+        with open(LAST_RECIPIENT_FILE, 'w') as f:
+            json.dump({'name': name, 'chat_id': chat_id}, f)
+    except Exception as exc:
+        LOG.debug(f"Failed to save last recipient: {exc}")
+
+def _load_last_recipient() -> Optional[tuple]:
+    """Load the last messaged recipient. Returns (name, chat_id) or None."""
+    try:
+        if os.path.exists(LAST_RECIPIENT_FILE):
+            with open(LAST_RECIPIENT_FILE, 'r') as f:
+                data = json.load(f)
+                return (data.get('name'), data.get('chat_id'))
+    except Exception as exc:
+        LOG.debug(f"Failed to load last recipient: {exc}")
+    return None
+
+def _save_sent_message(chat_id: str, message: str) -> None:
+    """Save sent message with timestamp for conversation tracking."""
+    import datetime as dt
+    try:
+        data = {}
+        if os.path.exists(SENT_MESSAGES_FILE):
+            with open(SENT_MESSAGES_FILE, 'r') as f:
+                data = json.load(f)
+        
+        data[str(chat_id)] = {
+            'message': message,
+            'timestamp': dt.datetime.now().isoformat()
+        }
+        
+        with open(SENT_MESSAGES_FILE, 'w') as f:
+            json.dump(data, f)
+    except Exception as exc:
+        LOG.debug(f"Failed to save sent message: {exc}")
 
 # Configuration
-CHAR_LIMIT = int(os.getenv("TELEGRAM_CHAR_LIMIT", "4096"))
+Telegram_CHAR_LIMIT = int(os.getenv("Telegram_CHAR_LIMIT", "160"))
 PRINT_RECEIPTS = os.getenv("PRINT_SEND_RECEIPTS", "false").lower() in {"1", "true", "yes"}
 
 
@@ -40,11 +82,11 @@ def _required_env(name: str) -> str:
 
 def send_telegram(recipient_name: str, chat_id: str, message_text: str) -> bool:
     """
-    Send Telegram message using Bot API.
+    Send Telegram message using Telegram API.
 
     Args:
         recipient_name: Contact name (for logging)
-        chat_id: Telegram chat ID
+        chat_id: Phone number in E.164 format
         message_text: Message body
 
     Returns:
@@ -52,10 +94,18 @@ def send_telegram(recipient_name: str, chat_id: str, message_text: str) -> bool:
     """
     try:
         bot_token = _required_env("TELEGRAM_BOT_TOKEN")
-        success = send_message(bot_token, int(chat_id), message_text)
-        if success:
-            LOG.info("Message sent to %s (chat %s)", recipient_name, chat_id)
-        return success
+        url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+        payload = {'chat_id': chat_id, 'text': message_text}
+        resp = requests.post(url, json=payload, timeout=10)
+        data = resp.json()
+
+        if data.get('ok'):
+            LOG.info("Message sent to %s (chat_id=%s)", recipient_name, chat_id)
+            return True
+        else:
+            LOG.error("Failed to send to %s: %s", recipient_name, data)
+            return False
+
     except Exception as exc:
         LOG.error("Failed to send message to %s: %s", recipient_name, exc)
         return False
@@ -63,17 +113,14 @@ def send_telegram(recipient_name: str, chat_id: str, message_text: str) -> bool:
 
 def print_send_receipt(recipient_name: str, message_text: str) -> None:
     """
-    Print optional receipt confirmation on thermal printer.
-
-    Args:
-        recipient_name: Contact name message was sent to
-        message_text: Message body that was sent
+    Print receipt with right-justified bubble for sent messages.
     """
     if not PRINT_RECEIPTS:
         return
 
     try:
         from kidfax.printer import get_printer
+        from kidfax.telegram_poller import _create_speech_bubble_right
         import datetime as dt
 
         allow_dummy = os.getenv("ALLOW_DUMMY_PRINTER", "false").lower() in {"1", "true", "yes"}
@@ -83,38 +130,29 @@ def print_send_receipt(recipient_name: str, message_text: str) -> None:
             LOG.debug("Printer not available for receipt")
             return
 
-        now = dt.datetime.now().strftime("%Y-%m-%d %H:%M")
-        line_width = int(os.getenv("PRINTER_LINE_WIDTH", "32"))
-
-        # Header
-        printer.set(align='center', font='a', width=2, height=2, bold=True)
-        printer.text("MESSAGE SENT\n")
-
-        # Metadata
-        printer.set(align='center', font='a', width=1, height=1, bold=False)
-        printer.text(f"{now}\n")
-        printer.text("-" * line_width + "\n")
-
-        # Recipient
-        printer.set(align='left', font='a', width=1, height=1, bold=True)
+        # To: recipient name (centered)
+        printer.set(align='center', font='a', width=1, height=1, bold=True)
         printer.text(f"To: {recipient_name.title()}\n\n")
 
-        # Message
-        printer.set(align='left', font='a', width=1, height=1, bold=False)
+        # Message in right-justified bubble
+        try:
+            bubble_img = _create_speech_bubble_right(message_text)
+            printer.set(align='right')
+            printer.image(bubble_img)
+        except Exception as exc:
+            LOG.debug(f"Bubble failed: {exc}")
+            import textwrap
+            line_width = int(os.getenv("PRINTER_LINE_WIDTH", "32"))
+            printer.set(align='right', font='a', width=1, height=1, bold=False)
+            for line in textwrap.wrap(message_text, width=line_width):
+                printer.text(line + "\n")
 
-        # Wrap message text
-        import textwrap
-        for line in textwrap.wrap(message_text, width=line_width):
-            printer.text(line + "\n")
+        # Timestamp (small, right-aligned)
+        now = dt.datetime.now().strftime("%m/%d/%y %I:%M %p")
+        printer.set(align='right', font='a', width=1, height=1, bold=False)
+        printer.text(f"{now}  \n")
 
-        # Footer
         printer.text("\n")
-        printer.text("-" * line_width + "\n")
-        printer.set(align='center', font='a', width=1, height=1, bold=False)
-        printer.text("✓ Delivered via Telegram\n")
-        printer.text("\n")
-
-        # Cut
         try:
             printer.cut()
         except Exception:
@@ -139,7 +177,7 @@ def interactive_loop() -> None:
     6. Show confirmation and optional receipt
     7. Return to contact list
     """
-    # Validate Telegram token early
+    # Validate Telegram bot token early
     try:
         _required_env("TELEGRAM_BOT_TOKEN")
     except RuntimeError as exc:
@@ -164,10 +202,20 @@ def interactive_loop() -> None:
         LOG.warning("E-ink display not available (continuing without display)")
 
     # Initialize message composer
-    composer = MessageComposer(contacts, char_limit=CHAR_LIMIT)
+    composer = MessageComposer(contacts, char_limit=Telegram_CHAR_LIMIT)
 
-    # Show initial contact list
-    render_contact_list(epd, composer.fkey_map)
+    # Check for last recipient and show their avatar, or show contact list
+    last_recipient = _load_last_recipient()
+    if last_recipient and last_recipient[0]:
+        last_name, last_chat_id = last_recipient
+        # Show last recipient ready to message
+        render_keyboard_mode(epd, last_name, "")
+        print(f"Ready to message: {last_name.title()}")
+        print("Press any F-key to change recipient, or start typing...")
+        # Pre-select this contact
+        composer.select_recipient_by_name(last_name)
+    else:
+        render_contact_list(epd, composer.fkey_map)
 
     # Keyboard event handler
     def on_key_press(key):
@@ -185,12 +233,12 @@ def interactive_loop() -> None:
             if fkey_name:
                 if composer.select_recipient_by_fkey(fkey_name):
                     print(f"\n→ Selected: {composer.selected_recipient}")
-                    print(f"Type your message (max {CHAR_LIMIT} chars), then press Enter to send:")
+                    print(f"Type your message (max {Telegram_CHAR_LIMIT} chars), then press Enter to send:")
                     render_keyboard_mode(
                         epd,
                         composer.selected_recipient,
                         composer.get_message(),
-                        CHAR_LIMIT
+                        Telegram_CHAR_LIMIT
                     )
                 else:
                     print(f"\n✗ No contact mapped to {fkey_name}")
@@ -223,8 +271,9 @@ def interactive_loop() -> None:
                     # Show "Sent!" confirmation
                     render_send_confirmation(epd, recipient_name, "Sent!")
 
-                    # Optional: Print receipt
-                    print_send_receipt(recipient_name, message_text)
+                    # Save for conversation tracking (prints with response)
+                    _save_sent_message(chat_id, message_text)
+                    _save_last_recipient(recipient_name, chat_id)
 
                     # Wait 2 seconds for user to see confirmation
                     time.sleep(2)
@@ -273,12 +322,14 @@ def interactive_loop() -> None:
                     return
 
                 if composer.add_character(key.char):
-                    # Echo character to terminal only (e-ink too slow for per-char updates)
+                    # Terminal echo only (e-ink too slow for per-char updates)
+                    pass
+                    # Echo character to console
                     sys.stdout.write(key.char)
                     sys.stdout.flush()
                 else:
                     # Character limit reached
-                    print(f"\n✗ Character limit reached ({CHAR_LIMIT})")
+                    print(f"\n✗ Character limit reached ({Telegram_CHAR_LIMIT})")
 
         except Exception as exc:
             LOG.error("Error handling key press: %s", exc)

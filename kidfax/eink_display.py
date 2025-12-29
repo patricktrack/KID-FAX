@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Shared e-ink display utilities for Kid Fax."""
+"""Shared e-ink display utilities for Kid Fax (Inky pHAT)."""
 from __future__ import annotations
 
-import importlib
 import logging
 import os
 import textwrap
@@ -12,12 +11,38 @@ LOG = logging.getLogger("kidfax.eink")
 
 # Environment configuration
 EINK_ENABLED = os.getenv("EINK_STATUS_ENABLED", "false").lower() in {"1", "true", "yes"}
-EINK_DRIVER_PACKAGE = os.getenv(
-    "EINK_DRIVER_PACKAGE",
-    "e-Paper.RaspberryPi_JetsonNano.python.lib.waveshare_epd",
-)
-EINK_DRIVER_MODULE = os.getenv("EINK_DRIVER_MODULE", "epd2in9d")
+EINK_COLOR = os.getenv("EINK_COLOR", "black")  # "black", "red", "yellow"
 HEADER_TEXT = os.getenv("KIDFAX_HEADER", "Kid Fax")
+
+
+class InkyWrapper:
+    """Wrapper to provide consistent API for Inky pHAT displays."""
+    
+    def __init__(self, display):
+        self._display = display
+        self.width = display.width
+        self.height = display.height
+    
+    def Clear(self, color=0xFF):
+        """Clear display (compatibility method)."""
+        pass  # Will be cleared when new image is set
+    
+    def display(self, image):
+        """Display image on screen."""
+        self._display.set_image(image)
+        self._display.show()
+    
+    def getbuffer(self, image):
+        """Return image (Inky handles conversion internally)."""
+        return image
+    
+    def sleep(self):
+        """No-op for Inky (no sleep mode needed)."""
+        pass
+    
+    def init(self):
+        """No-op for Inky (already initialized)."""
+        pass
 
 
 def _is_enabled() -> bool:
@@ -27,26 +52,22 @@ def _is_enabled() -> bool:
 
 def init_display():
     """
-    Initialize Waveshare e-Paper display.
+    Initialize Inky pHAT e-ink display.
 
     Returns:
-        EPD display object, or None if disabled or failed
-
-    Raises:
-        Exception: If display initialization fails and EINK_ENABLED is True
+        Display object, or None if disabled or failed
     """
     if not _is_enabled():
         LOG.debug("E-ink display disabled (EINK_STATUS_ENABLED=false)")
         return None
 
     try:
-        module = importlib.import_module(f"{EINK_DRIVER_PACKAGE}.{EINK_DRIVER_MODULE}")
-        epd = module.EPD()
-        epd.init()
-        LOG.info("E-ink display initialized (%s x %s)", epd.width, epd.height)
-        return epd
+        from inky import InkyPHAT_SSD1608 as InkyPHAT
+        inky_display = InkyPHAT(EINK_COLOR)
+        LOG.info("InkyPHAT initialized (%sx%s, %s)", inky_display.width, inky_display.height, EINK_COLOR)
+        return InkyWrapper(inky_display)
     except Exception as exc:
-        LOG.warning("Failed to initialize e-ink display: %s", exc)
+        LOG.warning("Failed to initialize InkyPHAT: %s", exc)
         return None
 
 
@@ -56,90 +77,71 @@ def render_polling_status(
     sender_label: Optional[str] = None,
     subtitle: Optional[str] = None,
 ) -> None:
-    """
-    Render SMS polling status on e-ink display.
-
-    Shows header, subtitle, new message count, and last sender.
-
-    Args:
-        epd: Initialized e-Paper display object
-        new_count: Number of new messages printed
-        sender_label: Label for last sender (e.g., "grandma (+15551234567)")
-        subtitle: Optional subtitle text (default: "Messages from family")
-    """
+    """Render message status on e-ink display."""
     if epd is None or new_count <= 0:
         return
 
     try:
         from PIL import Image, ImageDraw, ImageFont
 
-        epd.Clear(0xFF)
         width, height = epd.width, epd.height
-        image = Image.new('1', (width, height), 255)
+        image = Image.new('P', (width, height), 0)
         draw = ImageDraw.Draw(image)
         font = ImageFont.load_default()
 
         # Header
-        draw.text((10, 10), HEADER_TEXT, font=font, fill=0)
+        draw.text((10, 10), HEADER_TEXT, font=font, fill=1)
 
         # Subtitle
         subtitle_text = subtitle or os.getenv("KIDFAX_SUBTITLE", "Messages from family")
-        draw.text((10, 26), subtitle_text, font=font, fill=0)
+        draw.text((10, 26), subtitle_text, font=font, fill=1)
 
         # New message count
-        draw.text((10, 44), f"New: {new_count}", font=font, fill=0)
+        draw.text((10, 44), f"New: {new_count}", font=font, fill=1)
 
         # Last sender
         if sender_label:
-            draw.text((10, 62), f"Last: {sender_label}", font=font, fill=0)
+            draw.text((10, 62), f"Last: {sender_label[:20]}", font=font, fill=1)
 
         # Bottom accent line
-        draw.rectangle((10, height - 20, width - 10, height - 18), fill=0)
+        draw.rectangle((10, height - 15, width - 10, height - 12), fill=1)
 
         epd.display(epd.getbuffer(image))
-        epd.sleep()
     except Exception as exc:
         LOG.debug("Failed to update e-ink display: %s", exc)
 
 
 def render_contact_list(epd, fkey_map: dict[str, str]) -> None:
-    """
-    Render contact selection screen showing F-key mappings.
-
-    Args:
-        epd: Initialized e-Paper display object
-        fkey_map: Dictionary mapping F-keys to contact names (e.g., {"F1": "grandma"})
-    """
+    """Render contact selection screen showing F-key mappings."""
     if epd is None:
         return
 
     try:
         from PIL import Image, ImageDraw, ImageFont
 
-        epd.Clear(0xFF)
         width, height = epd.width, epd.height
-        image = Image.new('1', (width, height), 255)
+        image = Image.new('P', (width, height), 0)
         draw = ImageDraw.Draw(image)
         font = ImageFont.load_default()
 
         # Header
-        draw.text((10, 5), f"{HEADER_TEXT} - Reply Mode", font=font, fill=0)
-        draw.line((10, 20, width - 10, 20), fill=0)
+        draw.text((10, 5), f"{HEADER_TEXT} - Reply", font=font, fill=1)
+        draw.line((10, 18, width - 10, 18), fill=1)
 
-        # Contact list (max 8 visible on 2.9" screen)
-        y = 28
+        # Contact list
+        y = 24
+        line_height = 10
         for i, (fkey, contact_name) in enumerate(sorted(fkey_map.items())[:8]):
-            if y > height - 30:
+            if y > height - 20:
                 break
-            text = f"{fkey}  {contact_name.title()}"
-            draw.text((10, y), text, font=font, fill=0)
-            y += 12
+            text = f"{fkey} {contact_name.title()[:12]}"
+            draw.text((10, y), text, font=font, fill=1)
+            y += line_height
 
-        # Footer instruction
-        draw.text((10, height - 15), "Press F-key to reply", font=font, fill=0)
+        # Footer
+        draw.text((10, height - 12), "Press F-key", font=font, fill=1)
 
         epd.display(epd.getbuffer(image))
-        epd.sleep()
     except Exception as exc:
         LOG.debug("Failed to render contact list: %s", exc)
 
@@ -150,60 +152,68 @@ def render_keyboard_mode(
     message: str,
     char_limit: int = 160,
 ) -> None:
-    """
-    Render interactive keyboard mode showing recipient and typed message.
-
-    Layout:
-        To: Grandma
-        ─────────────────────
-        Thanks for the cookies!
-        They were delicious. Lo
-        ve you! See you soon!
-
-        [64/160]          ENTER
-
-    Args:
-        epd: Initialized e-Paper display object
-        recipient: Contact name being messaged
-        message: Current message text
-        char_limit: SMS character limit (default 160)
-    """
+    """Render keyboard mode with avatar and message text."""
     if epd is None:
         return
 
     try:
         from PIL import Image, ImageDraw, ImageFont
+        from pathlib import Path
 
-        epd.Clear(0xFF)
         width, height = epd.width, epd.height
-        image = Image.new('1', (width, height), 255)
+        image = Image.new('P', (width, height), 0)
         draw = ImageDraw.Draw(image)
         font = ImageFont.load_default()
 
-        # Recipient header (bold simulation with offset)
-        recipient_text = f"To: {recipient.title()}"
-        draw.text((10, 5), recipient_text, font=font, fill=0)
-        draw.text((11, 5), recipient_text, font=font, fill=0)  # Bold effect
+        # Avatar on left side
+        avatar_size = 56
+        avatar_x = 6
+        avatar_y = 6
 
-        # Separator line
-        draw.line((10, 20, width - 10, 20), fill=0)
+        # Try to load pre-processed e-ink avatar (fast)
+        eink_avatar_dir = Path.home() / ".kidfax_avatars" / "eink"
+        avatar_name = f"{recipient.lower().replace(' ', '_')}.png"
+        avatar_path = eink_avatar_dir / avatar_name
 
-        # Message text (wrapped, max ~25 chars per line on 2.9" screen)
-        y = 28
-        wrapped_lines = textwrap.wrap(message, width=25) if message else [""]
-        for line in wrapped_lines[:4]:  # Max 4 visible lines
-            if y > height - 30:
-                break
-            draw.text((10, y), line, font=font, fill=0)
-            y += 12
+        if avatar_path.exists():
+            try:
+                avatar = Image.open(avatar_path)
+                image.paste(avatar, (avatar_x, avatar_y))
+            except Exception:
+                draw.ellipse((avatar_x, avatar_y, avatar_x + avatar_size, avatar_y + avatar_size), outline=1, width=2)
+        else:
+            # Draw circle with first letter
+            draw.ellipse((avatar_x, avatar_y, avatar_x + avatar_size, avatar_y + avatar_size), outline=1, width=2)
+            letter = recipient[0].upper() if recipient else "?"
+            draw.text((avatar_x + 20, avatar_y + 18), letter, font=font, fill=1)
 
-        # Footer: character count and send instruction
-        char_count = f"[{len(message)}/{char_limit}]"
-        draw.text((10, height - 15), char_count, font=font, fill=0)
-        draw.text((width - 60, height - 15), "ENTER", font=font, fill=0)
+        # Recipient name next to avatar
+        name_x = avatar_x + avatar_size + 10
+        draw.text((name_x, 20), recipient.title()[:14], font=font, fill=1)
+
+        # Message text area (right of avatar, then full width below)
+        # First show text to the right of avatar
+        text_start_y = avatar_y + avatar_size + 8
+        text_x = 6
+        chars_per_line = (width - 12) // 6
+
+        if message:
+            wrapped_lines = textwrap.wrap(message, width=chars_per_line)
+            y = text_start_y
+            for line in wrapped_lines[:4]:
+                if y > height - 16:
+                    break
+                draw.text((text_x, y), line, font=font, fill=1)
+                y += 12
+        else:
+            # Show cursor
+            draw.text((text_x, text_start_y), "_", font=font, fill=1)
+
+        # Character count at bottom right
+        char_count = f"{len(message)}/{char_limit}"
+        draw.text((width - 45, height - 12), char_count, font=font, fill=1)
 
         epd.display(epd.getbuffer(image))
-        epd.sleep()
     except Exception as exc:
         LOG.debug("Failed to render keyboard mode: %s", exc)
 
@@ -214,66 +224,47 @@ def render_send_confirmation(
     status: str,
     duration_seconds: int = 2,
 ) -> None:
-    """
-    Render message send confirmation or error.
-
-    Args:
-        epd: Initialized e-Paper display object
-        recipient: Contact name message was sent to
-        status: Status text ("Sending...", "Sent!", "Error!")
-        duration_seconds: How long to display (not auto-cleared by this function)
-    """
+    """Render message send confirmation or error."""
     if epd is None:
         return
 
     try:
         from PIL import Image, ImageDraw, ImageFont
 
-        epd.Clear(0xFF)
         width, height = epd.width, epd.height
-        image = Image.new('1', (width, height), 255)
+        image = Image.new('P', (width, height), 0)
         draw = ImageDraw.Draw(image)
         font = ImageFont.load_default()
 
         # Center-aligned status
-        y_center = height // 2 - 20
+        y_center = height // 2 - 15
 
-        # Status icon/text (large)
+        # Status symbol
         if status == "Sent!":
-            symbol = "✓"
-        elif status == "Sending...":
-            symbol = "→"
-        else:  # Error
-            symbol = "✗"
+            symbol = "OK"
+        elif "Sending" in str(status):
+            symbol = "..."
+        else:
+            symbol = "X"
 
-        draw.text((width // 2 - 20, y_center), symbol, font=font, fill=0)
-        draw.text((width // 2 - 20 + 1, y_center), symbol, font=font, fill=0)  # Bold
-
-        # Status text
-        draw.text((width // 2 - 30, y_center + 20), status, font=font, fill=0)
-
-        # Recipient
-        recipient_text = f"To: {recipient.title()}"
-        draw.text((width // 2 - 40, y_center + 40), recipient_text, font=font, fill=0)
+        draw.text((width // 2 - 10, y_center), symbol, font=font, fill=1)
+        draw.text((width // 2 - 20, y_center + 15), str(status)[:10], font=font, fill=1)
+        draw.text((width // 2 - 30, y_center + 30), f"To: {recipient.title()[:10]}", font=font, fill=1)
 
         epd.display(epd.getbuffer(image))
-        epd.sleep()
     except Exception as exc:
         LOG.debug("Failed to render send confirmation: %s", exc)
 
 
 def clear_display(epd) -> None:
-    """
-    Clear e-ink display to white.
-
-    Args:
-        epd: Initialized e-Paper display object
-    """
+    """Clear e-ink display to white."""
     if epd is None:
         return
 
     try:
-        epd.Clear(0xFF)
-        epd.sleep()
+        from PIL import Image
+        width, height = epd.width, epd.height
+        image = Image.new('P', (width, height), 0)
+        epd.display(epd.getbuffer(image))
     except Exception as exc:
         LOG.debug("Failed to clear display: %s", exc)

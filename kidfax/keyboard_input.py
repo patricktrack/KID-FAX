@@ -229,6 +229,27 @@ class MessageComposer:
             return True
         return False
 
+    def select_recipient_by_name(self, name: str) -> bool:
+        """
+        Select recipient by contact name.
+
+        Args:
+            name: Contact name to select
+
+        Returns:
+            True if recipient selected, False if not found
+        """
+        name_lower = name.lower().replace(" ", "_")
+        for contact_name, chat_id in self.contacts.items():
+            if contact_name.lower().replace(" ", "_") == name_lower:
+                self.selected_recipient = contact_name
+                self.selected_number = chat_id
+                self.message_buffer = []
+                LOG.info("Pre-selected recipient: %s (%s)",
+                         self.selected_recipient, self.selected_number)
+                return True
+        return False
+
     def add_character(self, char: str) -> bool:
         """
         Add character to message buffer.

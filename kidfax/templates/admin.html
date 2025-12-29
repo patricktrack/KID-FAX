@@ -260,6 +260,53 @@
 
         <div id="message" class="message"></div>
 
+        <!-- Service Status Toggle -->
+        <div id="serviceStatus" style="background: #f8f9fa; border-radius: 12px; padding: 20px; margin-bottom: 30px; text-align: center; border: 3px solid #ddd;">
+            <div style="font-size: 14px; color: #666; margin-bottom: 10px;">Message Printing Service</div>
+            <button id="toggleBtn" onclick="toggleService()" style="
+                font-size: 24px;
+                padding: 20px 60px;
+                border: none;
+                border-radius: 50px;
+                cursor: pointer;
+                font-weight: bold;
+                transition: all 0.3s;
+                min-width: 200px;
+            ">
+                Loading...
+            </button>
+            <div id="statusText" style="margin-top: 10px; font-size: 12px; color: #666;"></div>
+        </div>
+
+
+
+        <!-- Chat Section -->
+        <div style="background: #e3f2fd; border-radius: 12px; padding: 20px; margin-bottom: 30px;">
+            <h3 style="margin-top: 0; margin-bottom: 15px;">Send Message</h3>
+            <div style="display: flex; gap: 10px; align-items: flex-start;">
+                <select id="chatContact" class="form-input" style="width: 150px;">
+                    {% for name, number in all_contacts.items() %}
+                    <option value="{{ name }}">{{ name }}</option>
+                    {% endfor %}
+                </select>
+                <textarea id="chatMessage" class="form-input" placeholder="Type your message..."
+                    style="flex: 1; min-height: 60px; resize: vertical;"></textarea>
+                <button onclick="sendChat()" class="btn-primary" style="padding: 15px 25px;">Send</button>
+            </div>
+        </div>
+
+        <!-- Discover Chats Section -->
+        <div style="background: #fff3e0; border-radius: 12px; padding: 20px; margin-bottom: 30px;">
+            <h3 style="margin-top: 0; margin-bottom: 15px;">Discover New Contacts</h3>
+            <p style="margin: 0 0 15px 0; color: #666; font-size: 14px;">
+                Have family members message your bot, then click Discover.
+            </p>
+            <button onclick="discoverChats()" class="btn-secondary" style="padding: 10px 20px;">
+                Discover Chats
+            </button>
+            <div id="discoveredChats" style="margin-top: 15px;"></div>
+        </div>
+
         <!-- Contacts Section -->
         <h2>📇 Contacts (Keyboard Mode)</h2>
 
@@ -304,6 +351,8 @@
                         </td>
                         {% endif %}
                         <td>
+                            <button class="btn-secondary" onclick="moveContact('{{ name }}', 'up')" title="Up" style="padding: 4px 8px;">Up</button>
+                            <button class="btn-secondary" onclick="moveContact('{{ name }}', 'down')" title="Down" style="padding: 4px 8px;">Dn</button>
                             <button class="btn-primary" onclick="editContact('{{ name }}', '{{ number }}')">Edit</button>
                             {% if avatar_enabled %}
                                 {% if has_avatar %}
@@ -366,6 +415,75 @@
             </button>
         </div>
     </div>
+
+        <!-- Settings Section -->
+        <div style="margin-top: 40px; padding-top: 30px; border-top: 2px solid #ddd;">
+            <h2>Settings</h2>
+
+            <div style="background: #f8f9fa; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+                <h3 style="margin-top: 0; margin-bottom: 15px; font-size: 16px;">Display</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div>
+                        <label style="display: block; font-size: 12px; color: #666; margin-bottom: 4px;">Header</label>
+                        <input type="text" id="setting_header" class="form-input" style="width: 100%;">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 12px; color: #666; margin-bottom: 4px;">Subtitle</label>
+                        <input type="text" id="setting_subtitle" class="form-input" style="width: 100%;">
+                    </div>
+                </div>
+            </div>
+
+            <div style="background: #f8f9fa; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+                <h3 style="margin-top: 0; margin-bottom: 15px; font-size: 16px;">Printer</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
+                    <div>
+                        <label style="display: block; font-size: 12px; color: #666; margin-bottom: 4px;">Type</label>
+                        <select id="setting_printer_type" class="form-input" style="width: 100%;">
+                            <option value="usb">USB</option>
+                            <option value="serial">Serial</option>
+                            <option value="network">Network</option>
+                            <option value="dummy">Dummy</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 12px; color: #666; margin-bottom: 4px;">Line Width</label>
+                        <input type="number" id="setting_line_width" class="form-input" style="width: 100%;">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 12px; color: #666; margin-bottom: 4px;">Avatar Size</label>
+                        <select id="setting_avatar_size" class="form-input" style="width: 100%;">
+                            <option value="96">96px</option>
+                            <option value="128">128px</option>
+                            <option value="144">144px</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div style="background: #f8f9fa; border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+                <h3 style="margin-top: 0; margin-bottom: 15px; font-size: 16px;">Features</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="setting_avatar_enabled">
+                        <span>Print Avatars</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="setting_download_photos">
+                        <span>Download Photos</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="setting_eink_enabled">
+                        <span>E-ink Display</span>
+                    </label>
+                </div>
+            </div>
+
+            <div style="text-align: right;">
+                <button onclick="saveSettings()" class="btn-primary" style="padding: 12px 30px;">Save Settings</button>
+            </div>
+        </div>
+
 
     <!-- Add Contact Modal -->
     <div id="addContactModal" class="modal">
@@ -749,6 +867,221 @@
                 event.target.style.display = 'none';
             }
         }
+
+
+        // Check service status
+        async function checkServiceStatus() {
+            try {
+                const response = await fetch('/admin/service/status', {credentials: 'include'});
+                const data = await response.json();
+                updateStatusUI(data.running);
+            } catch (error) {
+                console.error('Status check error:', error);
+                document.getElementById('toggleBtn').textContent = 'Error';
+            }
+        }
+
+        function updateStatusUI(isRunning) {
+            const btn = document.getElementById('toggleBtn');
+            const statusText = document.getElementById('statusText');
+            const container = document.getElementById('serviceStatus');
+
+            if (isRunning) {
+                btn.textContent = 'ON';
+                btn.style.background = '#28a745';
+                btn.style.color = 'white';
+                container.style.borderColor = '#28a745';
+                statusText.textContent = 'Messages will print automatically';
+            } else {
+                btn.textContent = 'OFF';
+                btn.style.background = '#dc3545';
+                btn.style.color = 'white';
+                container.style.borderColor = '#dc3545';
+                statusText.textContent = 'Printing paused';
+            }
+        }
+
+        async function toggleService() {
+            const btn = document.getElementById('toggleBtn');
+            btn.disabled = true;
+            btn.textContent = '...';
+            try {
+                const response = await fetch('/admin/service/toggle', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: {'Content-Type': 'application/json'}
+                });
+                const data = await response.json();
+                if (data.success) {
+                    updateStatusUI(data.running);
+                    showMessage('Service ' + (data.running ? 'started' : 'stopped'), 'success');
+                } else {
+                    showMessage('Error: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showMessage('Error: ' + error, 'error');
+            }
+            btn.disabled = false;
+        }
+
+        async function sendChat() {
+            const contact = document.getElementById('chatContact').value;
+            const message = document.getElementById('chatMessage').value.trim();
+            if (!message) { showMessage('Enter a message', 'error'); return; }
+            try {
+                const response = await fetch('/admin/chat/send', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({contact_name: contact, message: message})
+                });
+                const data = await response.json();
+                if (data.success) {
+                    showMessage('Sent!', 'success');
+                    document.getElementById('chatMessage').value = '';
+                } else {
+                    showMessage('Error: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showMessage('Error: ' + error, 'error');
+            }
+        }
+
+        async function discoverChats() {
+            const container = document.getElementById('discoveredChats');
+            container.innerHTML = '<p>Searching...</p>';
+            try {
+                const response = await fetch('/admin/discover', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: {'Content-Type': 'application/json'}
+                });
+                const data = await response.json();
+                if (data.success && data.chats && data.chats.length > 0) {
+                    let html = '<table style="width:100%;"><tr><th>Name</th><th>ID</th><th></th></tr>';
+                    data.chats.forEach(chat => {
+                        const name = chat.first_name + (chat.last_name ? ' ' + chat.last_name : '');
+                        html += '<tr><td>' + name + '</td><td>' + chat.chat_id + '</td>';
+                        html += '<td><button class="btn-primary" onclick="addDiscovered(\'' + name.toLowerCase().replace(/ /g,'_') + '\',\'' + chat.chat_id + '\')">Add</button></td></tr>';
+                    });
+                    html += '</table>';
+                    container.innerHTML = html;
+                } else {
+                    container.innerHTML = '<p>No new chats found</p>';
+                }
+            } catch (error) {
+                container.innerHTML = '<p style="color:red;">Error: ' + error + '</p>';
+            }
+        }
+
+        async function addDiscovered(name, chatId) {
+            const displayName = prompt('Contact name:', name);
+            if (!displayName) return;
+            try {
+                const response = await fetch('/admin/contacts/add', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({name: displayName, number: chatId})
+                });
+                const data = await response.json();
+                if (data.success) {
+                    showMessage('Added!', 'success');
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    showMessage('Error: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showMessage('Error: ' + error, 'error');
+            }
+        }
+
+        async function moveContact(name, direction) {
+            const rows = document.querySelectorAll('tbody tr');
+            const order = [];
+            rows.forEach(row => {
+                const cell = row.cells[1];
+                if (cell) order.push(cell.textContent.trim());
+            });
+            const idx = order.indexOf(name);
+            if (idx === -1) return;
+            if (direction === 'up' && idx > 0) {
+                [order[idx], order[idx-1]] = [order[idx-1], order[idx]];
+            } else if (direction === 'down' && idx < order.length - 1) {
+                [order[idx], order[idx+1]] = [order[idx+1], order[idx]];
+            } else return;
+            try {
+                const response = await fetch('/admin/contacts/reorder', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({order: order})
+                });
+                const data = await response.json();
+                if (data.success) location.reload();
+                else showMessage('Error: ' + data.error, 'error');
+            } catch (error) {
+                showMessage('Error: ' + error, 'error');
+            }
+        }
+
+        async function loadSettings() {
+            try {
+                const response = await fetch('/admin/settings', {credentials: 'include'});
+                const data = await response.json();
+                if (data.success) {
+                    const s = data.settings;
+                    document.getElementById('setting_header').value = s.KIDFAX_HEADER || '';
+                    document.getElementById('setting_subtitle').value = s.KIDFAX_SUBTITLE || '';
+                    document.getElementById('setting_printer_type').value = s.PRINTER_TYPE || 'usb';
+                    document.getElementById('setting_line_width').value = s.PRINTER_LINE_WIDTH || '32';
+                    document.getElementById('setting_avatar_size').value = s.AVATAR_SIZE || '144';
+                    document.getElementById('setting_avatar_enabled').checked = s.AVATAR_ENABLED === 'true';
+                    document.getElementById('setting_download_photos').checked = s.TELEGRAM_DOWNLOAD_PHOTOS === 'true';
+                    document.getElementById('setting_eink_enabled').checked = s.EINK_STATUS_ENABLED === 'true';
+                }
+            } catch (error) {
+                console.error('Load settings error:', error);
+            }
+        }
+
+        async function saveSettings() {
+            const settings = {
+                KIDFAX_HEADER: document.getElementById('setting_header').value,
+                KIDFAX_SUBTITLE: document.getElementById('setting_subtitle').value,
+                PRINTER_TYPE: document.getElementById('setting_printer_type').value,
+                PRINTER_LINE_WIDTH: document.getElementById('setting_line_width').value,
+                AVATAR_SIZE: document.getElementById('setting_avatar_size').value,
+                AVATAR_ENABLED: document.getElementById('setting_avatar_enabled').checked ? 'true' : 'false',
+                TELEGRAM_DOWNLOAD_PHOTOS: document.getElementById('setting_download_photos').checked ? 'true' : 'false',
+                EINK_STATUS_ENABLED: document.getElementById('setting_eink_enabled').checked ? 'true' : 'false'
+            };
+            try {
+                const response = await fetch('/admin/settings', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(settings)
+                });
+                const data = await response.json();
+                if (data.success) {
+                    showMessage('Saved! Restarting...', 'success');
+                    setTimeout(() => location.reload(), 2000);
+                } else {
+                    showMessage('Error: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showMessage('Error: ' + error, 'error');
+            }
+        }
+
+        // Init on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            checkServiceStatus();
+            loadSettings();
+            setInterval(checkServiceStatus, 10000);
+        });
+
     </script>
 </body>
 </html>
