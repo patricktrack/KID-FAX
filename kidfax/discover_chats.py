@@ -3,8 +3,23 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 import requests
 from typing import Dict, List
+
+# Load .env file
+def _load_env():
+    """Load environment variables from .env file."""
+    env_path = Path(__file__).parent.parent / ".env"
+    if env_path.exists():
+        with open(env_path) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, _, value = line.partition('=')
+                    os.environ.setdefault(key.strip(), value.strip())
+
+_load_env()
 
 
 def get_bot_token() -> str:
