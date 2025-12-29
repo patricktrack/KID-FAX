@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional, Set
 from PIL import Image, ImageDraw, ImageFont
 
 from kidfax.avatar_manager import ensure_avatar_dir, get_avatar_path, _process_image
-from kidfax.eink_display import init_display, render_polling_status
+# e-ink display handled by keyboard service only - not needed here
 from kidfax.printer import get_printer
 
 LOG = logging.getLogger("kidfax.telegram")
@@ -579,8 +579,7 @@ def poll_loop() -> None:
     # Initialize avatar directory
     ensure_avatar_dir()
 
-    # Initialize e-ink display
-    epd = init_display()
+    # e-ink display is handled by keyboard service - not initialized here
 
     printer = None
     while True:
@@ -646,9 +645,7 @@ def poll_loop() -> None:
                 last_sender = sender_label
                 state_dirty = True
 
-            # Update e-ink display
-            if printed_now:
-                render_polling_status(epd, printed_now, last_sender)
+            # e-ink display stays in compose mode (handled by keyboard service)
 
             # Save state
             if state_dirty:
