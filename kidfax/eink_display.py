@@ -152,7 +152,7 @@ def render_keyboard_mode(
     message: str,
     char_limit: int = 160,
 ) -> None:
-    """Render keyboard mode with avatar and message text."""
+    """Render keyboard mode with avatar and message text in larger font."""
     if epd is None:
         return
 
@@ -163,14 +163,23 @@ def render_keyboard_mode(
         width, height = epd.width, epd.height
         image = Image.new('P', (width, height), 0)
         draw = ImageDraw.Draw(image)
-        font = ImageFont.load_default()
 
-        # Avatar on left side
-        avatar_size = 56
-        avatar_x = 6
-        avatar_y = 6
+        # Try to load larger fonts
+        try:
+            name_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 16)
+            text_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 14)
+            small_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 10)
+        except (IOError, OSError):
+            name_font = ImageFont.load_default()
+            text_font = ImageFont.load_default()
+            small_font = ImageFont.load_default()
 
-        # Try to load pre-processed e-ink avatar (fast)
+        # Avatar on left side (smaller to leave room for text)
+        avatar_size = 48
+        avatar_x = 4
+        avatar_y = 4
+
+        # Try to load pre-processed e-ink avatar
         eink_avatar_dir = Path.home() / ".kidfax_avatars" / "eink"
         avatar_name = f"{recipient.lower().replace(' ', '_')}.png"
         avatar_path = eink_avatar_dir / avatar_name
@@ -178,6 +187,9 @@ def render_keyboard_mode(
         if avatar_path.exists():
             try:
                 avatar = Image.open(avatar_path)
+                # Resize if needed
+                if avatar.size != (avatar_size, avatar_size):
+                    avatar = avatar.resize((avatar_size, avatar_size))
                 image.paste(avatar, (avatar_x, avatar_y))
             except Exception:
                 draw.ellipse((avatar_x, avatar_y, avatar_x + avatar_size, avatar_y + avatar_size), outline=1, width=2)
@@ -185,33 +197,36 @@ def render_keyboard_mode(
             # Draw circle with first letter
             draw.ellipse((avatar_x, avatar_y, avatar_x + avatar_size, avatar_y + avatar_size), outline=1, width=2)
             letter = recipient[0].upper() if recipient else "?"
-            draw.text((avatar_x + 20, avatar_y + 18), letter, font=font, fill=1)
+            draw.text((avatar_x + 16, avatar_y + 14), letter, font=name_font, fill=1)
 
         # Recipient name next to avatar
-        name_x = avatar_x + avatar_size + 10
-        draw.text((name_x, 20), recipient.title()[:14], font=font, fill=1)
+        name_x = avatar_x + avatar_size + 8
+        draw.text((name_x, 8), f"To: {recipient.title()[:12]}", font=name_font, fill=1)
 
-        # Message text area (right of avatar, then full width below)
-        # First show text to the right of avatar
-        text_start_y = avatar_y + avatar_size + 8
+        # Character count next to name
+        char_count = f"{len(message)}/{char_limit}"
+        draw.text((name_x, 28), char_count, font=small_font, fill=1)
+
+        # Divider line
+        divider_y = avatar_y + avatar_size + 4
+        draw.line((4, divider_y, width - 4, divider_y), fill=1, width=1)
+
+        # Message text area (below avatar, full width, larger font)
+        text_start_y = divider_y + 6
         text_x = 6
-        chars_per_line = (width - 12) // 6
+        line_height = 18
+        chars_per_line = 28  # Wider chars for larger font
 
         if message:
             wrapped_lines = textwrap.wrap(message, width=chars_per_line)
             y = text_start_y
-            for line in wrapped_lines[:4]:
-                if y > height - 16:
-                    break
-                draw.text((text_x, y), line, font=font, fill=1)
-                y += 12
+            max_lines = (height - text_start_y - 4) // line_height
+            for line in wrapped_lines[:max_lines]:
+                draw.text((text_x, y), line, font=text_font, fill=1)
+                y += line_height
         else:
-            # Show cursor
-            draw.text((text_x, text_start_y), "_", font=font, fill=1)
-
-        # Character count at bottom right
-        char_count = f"{len(message)}/{char_limit}"
-        draw.text((width - 45, height - 12), char_count, font=font, fill=1)
+            # Show cursor/prompt
+            draw.text((text_x, text_start_y), "Type message...", font=text_font, fill=1)
 
         epd.display(epd.getbuffer(image))
     except Exception as exc:
