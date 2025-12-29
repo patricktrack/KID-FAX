@@ -298,17 +298,21 @@ def interactive_loop() -> None:
                 render_keyboard_mode(epd, recipient_name, "", Telegram_CHAR_LIMIT)
                 continue
 
-            # Backspace: Delete character
+            # Backspace: Delete character and refresh e-ink
             if key_code == ecodes.KEY_BACKSPACE:
                 if composer.selected_recipient and composer.delete_character():
-                    pass  # Character deleted
+                    render_keyboard_mode(
+                        epd,
+                        composer.selected_recipient,
+                        composer.get_message(),
+                        Telegram_CHAR_LIMIT
+                    )
                 continue
 
-            # Space: Add space and update e-ink every 3 words
+            # Space: Add space and update e-ink every 4 chars
             if key_code == ecodes.KEY_SPACE:
                 if composer.selected_recipient and composer.add_character(' '):
-                    word_count = composer.get_message().count(' ')
-                    if word_count % 3 == 0:
+                    if len(composer.get_message()) % 4 == 0:
                         render_keyboard_mode(
                             epd,
                             composer.selected_recipient,
@@ -334,6 +338,14 @@ def interactive_loop() -> None:
                     char = KEY_MAP[key_code]
 
                 composer.add_character(char)
+                # Update e-ink every 4 characters
+                if len(composer.get_message()) % 4 == 0:
+                    render_keyboard_mode(
+                        epd,
+                        composer.selected_recipient,
+                        composer.get_message(),
+                        Telegram_CHAR_LIMIT
+                    )
                 continue
 
     except KeyboardInterrupt:
