@@ -403,6 +403,50 @@ def _extract_message_data(update: Dict) -> Optional[Dict]:
     }
 
 
+def _create_avatar_header(avatar_path: Path, display_name: str, max_width: int = 360) -> Image.Image:
+    """Create header image with avatar on left and name next to it."""
+    avatar_size = 96
+    padding = 8
+
+    # Load font for name
+    try:
+        name_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 24)
+    except (IOError, OSError):
+        name_font = ImageFont.load_default()
+
+    # Load avatar
+    try:
+        avatar = Image.open(avatar_path)
+        if avatar.size != (avatar_size, avatar_size):
+            avatar = avatar.resize((avatar_size, avatar_size))
+        # Convert to 1-bit for thermal printer
+        if avatar.mode != '1':
+            avatar = avatar.convert('L').point(lambda x: 0 if x < 128 else 255, '1')
+    except Exception:
+        # Create placeholder
+        avatar = Image.new('1', (avatar_size, avatar_size), 1)
+        draw = ImageDraw.Draw(avatar)
+        draw.rectangle([(0, 0), (avatar_size-1, avatar_size-1)], outline=0)
+
+    # Calculate total dimensions
+    total_height = avatar_size + padding
+    total_width = max_width
+
+    # Create image
+    img = Image.new('1', (total_width, total_height), 1)
+
+    # Paste avatar on left
+    img.paste(avatar, (padding, 0))
+
+    # Draw name next to avatar
+    draw = ImageDraw.Draw(img)
+    name_x = avatar_size + padding * 3
+    name_y = (avatar_size - 24) // 2  # Center vertically
+    draw.text((name_x, name_y), display_name, font=name_font, fill=0)
+
+    return img
+
+
 def _print_telegram_message(printer: object, sender_label: str, text: str, photo: Optional[Image.Image] = None) -> None:
     """Print Telegram message with optional photo."""
     # 1. Extract contact info
@@ -429,32 +473,36 @@ def _print_telegram_message(printer: object, sender_label: str, text: str, photo
             sent_bubble = _create_speech_bubble_right(_sanitize(sent_text))
             printer.set(align='right')
             printer.image(sent_bubble)
-            printer.set(align='right', font='a', width=1, height=1, bold=False)
+            # Smaller timestamp for sent message
+            printer.set(align='right', font='b', width=1, height=1, bold=False)
             printer.text(f"{sent_time}  \n\n")
         except Exception as exc:
             LOG.warning(f"Failed to print sent bubble: {exc}")
             printer.set(align='right', font='a', width=1, height=1, bold=False)
             printer.text(f"{sent_text}\n")
+            printer.set(align='right', font='b', width=1, height=1, bold=False)
             printer.text(f"{sent_time}  \n\n")
 
-
-    # 2. From name (centered)
-    printer.set(align='center', font='a', width=1, height=1, bold=True)
-    printer.text(f"From: {display_name}\n\n")
-
-    # 3. Avatar
+    # 2. Avatar + Name header (left-justified, side by side)
     if avatar_enabled and contact_name:
         avatar_path = get_avatar_path(contact_name)
         if avatar_path and avatar_path.exists():
             try:
-                img = Image.open(avatar_path)
-                printer.set(align='center')
-                printer.image(img)
-                printer.text("\n")
+                header_img = _create_avatar_header(avatar_path, display_name)
+                printer.set(align='left')
+                printer.image(header_img)
             except Exception as exc:
-                LOG.warning(f"Failed to print avatar: {exc}")
+                LOG.warning(f"Failed to print avatar header: {exc}")
+                printer.set(align='left', font='a', width=1, height=1, bold=True)
+                printer.text(f"{display_name}\n\n")
+        else:
+            printer.set(align='left', font='a', width=1, height=1, bold=True)
+            printer.text(f"{display_name}\n\n")
+    else:
+        printer.set(align='left', font='a', width=1, height=1, bold=True)
+        printer.text(f"{display_name}\n\n")
 
-    # 4. Message text in speech bubble (left-justified)
+    # 3. Message text in speech bubble (left-justified)
     if text:
         try:
             bubble_img = _create_speech_bubble(_sanitize(text))
@@ -466,9 +514,9 @@ def _print_telegram_message(printer: object, sender_label: str, text: str, photo
             for line in _wrap_text(_sanitize(text)):
                 printer.text(line + "\n")
 
-    # 5. Timestamp (small, left-aligned, below message)
+    # 4. Timestamp (smaller font, left-aligned, below message)
     now = dt.datetime.now().strftime("%m/%d/%y %I:%M %p")
-    printer.set(align='left', font='a', width=1, height=1, bold=False)
+    printer.set(align='left', font='b', width=1, height=1, bold=False)
     printer.text(f"  {now}\n")
 
     # 6. Photo (if present)
