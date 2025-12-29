@@ -2,6 +2,7 @@
 python-escpos==3.0a8
 pyusb==1.2.1
 Pillow==10.3.0
-pynput==1.7.6
+evdev==1.9.2
 Flask==3.0.0
-# Note: Telegram Bot API uses requests library (Python stdlib)
+requests==2.31.0
+# Note: pynput removed - using evdev for headless keyboard input
