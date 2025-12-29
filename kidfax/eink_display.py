@@ -166,21 +166,19 @@ def render_keyboard_mode(
 
         # Try to load larger fonts
         try:
-            name_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 16)
+            name_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 18)
             text_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 14)
-            small_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 10)
         except (IOError, OSError):
             name_font = ImageFont.load_default()
             text_font = ImageFont.load_default()
-            small_font = ImageFont.load_default()
 
-        # Avatar on left side (smaller to leave room for text)
+        # Avatar on left side
         avatar_size = 48
         avatar_x = 4
         avatar_y = 4
 
-        # Try to load pre-processed e-ink avatar
-        eink_avatar_dir = Path.home() / ".kidfax_avatars" / "eink"
+        # Use absolute path for avatars (keyboard runs as root)
+        eink_avatar_dir = Path("/home/patricktrack/.kidfax_avatars/eink")
         avatar_name = f"{recipient.lower().replace(' ', '_')}.png"
         avatar_path = eink_avatar_dir / avatar_name
 
@@ -199,23 +197,15 @@ def render_keyboard_mode(
             letter = recipient[0].upper() if recipient else "?"
             draw.text((avatar_x + 16, avatar_y + 14), letter, font=name_font, fill=1)
 
-        # Recipient name next to avatar
+        # Recipient name next to avatar (no "To:", no char count, no divider)
         name_x = avatar_x + avatar_size + 8
-        draw.text((name_x, 8), f"To: {recipient.title()[:12]}", font=name_font, fill=1)
+        draw.text((name_x, 18), recipient.title()[:12], font=name_font, fill=1)
 
-        # Character count next to name
-        char_count = f"{len(message)}/{char_limit}"
-        draw.text((name_x, 28), char_count, font=small_font, fill=1)
-
-        # Divider line
-        divider_y = avatar_y + avatar_size + 4
-        draw.line((4, divider_y, width - 4, divider_y), fill=1, width=1)
-
-        # Message text area (below avatar, full width, larger font)
-        text_start_y = divider_y + 6
+        # Message text area (below avatar, full width)
+        text_start_y = avatar_y + avatar_size + 8
         text_x = 6
         line_height = 18
-        chars_per_line = 28  # Wider chars for larger font
+        chars_per_line = 28
 
         if message:
             wrapped_lines = textwrap.wrap(message, width=chars_per_line)
