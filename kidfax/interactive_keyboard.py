@@ -27,8 +27,9 @@ from kidfax.keyboard_input import (
 LOG = logging.getLogger("kidfax.interactive")
 
 # Sent message tracking for conversation mode
-SENT_MESSAGES_FILE = os.path.expanduser("~/.kidfax_sent_messages.json")
-LAST_RECIPIENT_FILE = os.path.expanduser("~/.kidfax_last_recipient.json")
+# Use absolute path so root (keyboard) and patricktrack (poller) share the same file
+SENT_MESSAGES_FILE = "/home/patricktrack/.kidfax_sent_messages.json"
+LAST_RECIPIENT_FILE = "/home/patricktrack/.kidfax_last_recipient.json"
 
 # Load .env file
 def _load_env():

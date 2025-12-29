@@ -29,7 +29,8 @@ ALLOW_DUMMY = os.getenv("ALLOW_DUMMY_PRINTER", "false").lower() in {"1", "true",
 
 
 # Conversation tracking - show kid's message if family responds within 10 min
-SENT_MESSAGES_FILE = Path.home() / ".kidfax_sent_messages.json"
+# Use absolute path so root (keyboard) and patricktrack (poller) share the same file
+SENT_MESSAGES_FILE = Path("/home/patricktrack/.kidfax_sent_messages.json")
 CONVERSATION_WINDOW_MINUTES = 10
 
 def _get_recent_sent_message(chat_id: int) -> Optional[tuple]:
