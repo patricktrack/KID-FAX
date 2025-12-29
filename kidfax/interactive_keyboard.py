@@ -282,17 +282,10 @@ def interactive_loop() -> None:
                     render_send_confirmation(epd, recipient_name, "Error!")
                     time.sleep(2)
 
-                # Reset and return to contact list
-                composer.reset()
-                render_contact_list(epd, composer.fkey_map)
-                print("\n" + "="*50)
-                print("Kid Fax - Reply Mode")
-                print("="*50)
-                print("Press F1-F12 to select a recipient:")
-                for fkey, name in sorted(composer.fkey_map.items()):
-                    print(f"  {fkey}: {name.title()}")
-                print("\nPress ESC to exit")
-                print("="*50)
+                # Clear message but stay on same recipient, ready to type again
+                composer.clear_message()
+                render_keyboard_mode(epd, recipient_name, "", Telegram_CHAR_LIMIT)
+                print(f"\nReady to message {recipient_name.title()} again (or press F-key to switch)")
 
                 return
 
