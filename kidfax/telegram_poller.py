@@ -134,7 +134,7 @@ def _sanitize(value: str) -> str:
     return value.encode(ENCODING, "ignore").decode(ENCODING)
 
 
-def _create_speech_bubble(text: str, max_width: int = 360) -> Image.Image:
+def _create_speech_bubble(text: str, max_width: int = 360, timestamp: str = None) -> Image.Image:
     """
     Create a speech bubble image with the message text inside.
     Bubble width adapts to text length. Left-justified, no tail.
@@ -142,6 +142,7 @@ def _create_speech_bubble(text: str, max_width: int = 360) -> Image.Image:
     Args:
         text: Message text to display
         max_width: Maximum width in pixels (thermal printer width)
+        timestamp: Optional timestamp to display below bubble (left-aligned with bubble)
 
     Returns:
         PIL Image with speech bubble
@@ -151,16 +152,20 @@ def _create_speech_bubble(text: str, max_width: int = 360) -> Image.Image:
     corner_radius = 18
     line_height = 28
     font_size = 20
+    timestamp_font_size = 14
     min_bubble_width = 80  # Minimum width for short messages
 
     # Try to load a font, fall back to default
     try:
         font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", font_size)
+        timestamp_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", timestamp_font_size)
     except (IOError, OSError):
         try:
             font = ImageFont.truetype("/usr/share/fonts/TTF/DejaVuSans.ttf", font_size)
+            timestamp_font = ImageFont.truetype("/usr/share/fonts/TTF/DejaVuSans.ttf", timestamp_font_size)
         except (IOError, OSError):
             font = ImageFont.load_default()
+            timestamp_font = ImageFont.load_default()
 
     # Calculate available width for text
     max_text_width = max_width - (padding * 2) - 10
@@ -196,7 +201,8 @@ def _create_speech_bubble(text: str, max_width: int = 360) -> Image.Image:
     text_height = len(wrapped_lines) * line_height
     bubble_height = text_height + (padding * 2)
     total_width = bubble_width + 4
-    total_height = bubble_height + 4
+    timestamp_height = 24 if timestamp else 0
+    total_height = bubble_height + 4 + timestamp_height
 
     # Create image (white background)
     img = Image.new('1', (total_width, total_height), 1)  # 1-bit, white
@@ -230,22 +236,29 @@ def _create_speech_bubble(text: str, max_width: int = 360) -> Image.Image:
     for i, line in enumerate(wrapped_lines):
         draw.text((text_x, text_y + i * line_height), line, font=font, fill=0)
 
+    # Draw timestamp below bubble, aligned with left edge
+    if timestamp:
+        draw.text((bx, by + bh + 6), timestamp, font=timestamp_font, fill=0)
+
     return img
 
 
 
-def _create_speech_bubble_right(text: str, max_width: int = 360) -> Image.Image:
+def _create_speech_bubble_right(text: str, max_width: int = 360, timestamp: str = None) -> Image.Image:
     """Create a RIGHT-justified speech bubble for sent messages."""
     padding = 16
     corner_radius = 18
     line_height = 28
     font_size = 20
+    timestamp_font_size = 14
     min_bubble_width = 80
 
     try:
         font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", font_size)
+        timestamp_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", timestamp_font_size)
     except (IOError, OSError):
         font = ImageFont.load_default()
+        timestamp_font = ImageFont.load_default()
 
     max_text_width = max_width - (padding * 2) - 10
     chars_per_line = max_text_width // 11
@@ -272,7 +285,8 @@ def _create_speech_bubble_right(text: str, max_width: int = 360) -> Image.Image:
     text_height = len(wrapped_lines) * line_height
     bubble_height = text_height + (padding * 2)
     total_width = max_width
-    total_height = bubble_height + 4
+    timestamp_height = 24 if timestamp else 0
+    total_height = bubble_height + 4 + timestamp_height
 
     img = Image.new('1', (total_width, total_height), 1)
     draw = ImageDraw.Draw(img)
@@ -298,6 +312,17 @@ def _create_speech_bubble_right(text: str, max_width: int = 360) -> Image.Image:
     text_y = by + padding
     for i, line in enumerate(wrapped_lines):
         draw.text((text_x, text_y + i * line_height), line, font=font, fill=0)
+
+    # Draw timestamp below bubble, aligned with right edge of bubble
+    if timestamp:
+        try:
+            ts_bbox = timestamp_font.getbbox(timestamp)
+            ts_width = ts_bbox[2] - ts_bbox[0]
+        except AttributeError:
+            ts_width = len(timestamp) * 8
+        # Right-align timestamp with bubble's right edge
+        ts_x = bx + bw - ts_width
+        draw.text((ts_x, by + bh + 6), timestamp, font=timestamp_font, fill=0)
 
     return img
 
@@ -467,15 +492,13 @@ def _print_telegram_message(printer: object, sender_label: str, text: str, photo
     recent_sent = _get_recent_sent_message(chat_id) if chat_id else None
 
     if recent_sent:
-        # Print kid's message first (right-justified bubble)
+        # Print kid's message first (right-justified bubble with timestamp)
         sent_text, sent_time = recent_sent
         try:
-            sent_bubble = _create_speech_bubble_right(_sanitize(sent_text))
-            printer.set(align='right')
+            sent_bubble = _create_speech_bubble_right(_sanitize(sent_text), timestamp=sent_time)
+            printer.set(align='left')  # Image handles right-justification internally
             printer.image(sent_bubble)
-            # Smaller timestamp for sent message
-            printer.set(align='right', font='b', width=1, height=1, bold=False)
-            printer.text(f"{sent_time}  \n\n")
+            printer.text("\n")
         except Exception as exc:
             LOG.warning(f"Failed to print sent bubble: {exc}")
             printer.set(align='right', font='a', width=1, height=1, bold=False)
@@ -502,10 +525,11 @@ def _print_telegram_message(printer: object, sender_label: str, text: str, photo
         printer.set(align='left', font='a', width=1, height=1, bold=True)
         printer.text(f"{display_name}\n\n")
 
-    # 3. Message text in speech bubble (left-justified)
+    # 3. Message text in speech bubble with timestamp (left-justified)
+    now = dt.datetime.now().strftime("%m/%d/%y %I:%M %p")
     if text:
         try:
-            bubble_img = _create_speech_bubble(_sanitize(text))
+            bubble_img = _create_speech_bubble(_sanitize(text), timestamp=now)
             printer.set(align='left')
             printer.image(bubble_img)
         except Exception as exc:
@@ -513,11 +537,8 @@ def _print_telegram_message(printer: object, sender_label: str, text: str, photo
             printer.set(align='left', font='a', width=1, height=1, bold=False)
             for line in _wrap_text(_sanitize(text)):
                 printer.text(line + "\n")
-
-    # 4. Timestamp (smaller font, left-aligned, below message)
-    now = dt.datetime.now().strftime("%m/%d/%y %I:%M %p")
-    printer.set(align='left', font='b', width=1, height=1, bold=False)
-    printer.text(f"  {now}\n")
+            printer.set(align='left', font='b', width=1, height=1, bold=False)
+            printer.text(f"{now}\n")
 
     # 6. Photo (if present)
     if photo:
